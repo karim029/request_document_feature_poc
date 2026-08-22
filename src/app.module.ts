@@ -3,6 +3,9 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Accountant } from './accountants/entities/accountant.entity';
+import { Client } from './clients/entities/client.entity';
+import { DocumentRequest } from './requests/entities/documentRequest';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -18,7 +21,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       username: configService.get('DB_USERNAME'),
       password: configService.get('DB_PASSWORD'),
       database: configService.get('DB_DATABASE'),
-      entities: [],
+      entities: [Accountant, Client, DocumentRequest],
       synchronize: true
     })
   })
