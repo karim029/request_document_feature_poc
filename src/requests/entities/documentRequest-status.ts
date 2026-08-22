@@ -1,5 +1,5 @@
 
-export enum RequestStatus {
+export enum DocumentRequestStatus {
     Pending = 'pending',
     Reviewing = 'reviewing',
     Rejected = 'rejected',
