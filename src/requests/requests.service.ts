@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DocumentRequest } from './entities/documentRequest';
 import { Repository } from 'typeorm';
@@ -12,6 +12,14 @@ export class RequestsService {
 
     async getAllRequests(){
        return await this.requestRepository.find()
+    }
+
+    async getRequest(id: number){
+        const request = await this.requestRepository.findOneBy({id})
+        if(!request){
+            throw new NotFoundException('No request found with this id')
+        }
+        return request
     }
 
 }
