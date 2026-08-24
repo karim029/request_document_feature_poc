@@ -1,5 +1,6 @@
-import { Controller, Get, Param, ParseIntPipe, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Req } from '@nestjs/common';
 import { RequestsService } from './requests.service';
+import { CreateRequestDto } from './dto/create.request.dto';
 
 @Controller('requests')
 export class RequestsController {
@@ -13,5 +14,10 @@ export class RequestsController {
     @Get(':id')
     getRequest(@Param('id',ParseIntPipe) id: number){
         return this.requestsService.getRequest(id)
+    }
+
+    @Post()
+    createNewRequest(@Body() createRequestDto: CreateRequestDto){
+        return this.requestsService.createRequest(createRequestDto)
     }
 }
