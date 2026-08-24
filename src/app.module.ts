@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Accountant } from './accountants/entities/accountant.entity';
 import { Client } from './clients/entities/client.entity';
 import { DocumentRequest } from './requests/entities/documentRequest';
+import { RequestsModule } from './requests/requests.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -24,7 +25,8 @@ import { DocumentRequest } from './requests/entities/documentRequest';
       entities: [Accountant, Client, DocumentRequest],
       synchronize: true
     })
-  })
+  }),
+  RequestsModule
 
 ],
   controllers: [AppController],
