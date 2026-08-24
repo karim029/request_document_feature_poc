@@ -1,6 +1,9 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create.request.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Express } from 'express';
+type MulterFile = Express.Multer.File
 
 @Controller('requests')
 export class RequestsController {
@@ -19,5 +22,11 @@ export class RequestsController {
     @Post()
     createNewRequest(@Body() createRequestDto: CreateRequestDto){
         return this.requestsService.createRequest(createRequestDto)
+    }
+
+    @Post('upload/:id')
+    @UseInterceptors(FileInterceptor('file'))
+    uploadRequestFile(@Param('id',ParseIntPipe) requestId: number, @UploadedFile() file: MulterFile){
+      return this.requestsService.saveDocument(requestId, file)
     }
 }

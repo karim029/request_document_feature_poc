@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DocumentRequest } from './entities/documentRequest';
 import { Repository } from 'typeorm';
 import { CreateRequestDto } from './dto/create.request.dto';
 import { Client } from 'src/clients/entities/client.entity';
+import { DocumentRequestStatus } from './entities/documentRequest-status';
 
 @Injectable()
 export class RequestsService {
@@ -39,6 +40,22 @@ export class RequestsService {
 
         return await this.requestRepository.save(newRequest)
 
+    }
+
+    async saveDocument(requestId: number ,file: Express.Multer.File ){
+
+       // fetch the request
+       const req = await this.requestRepository.findOneBy({id: requestId})
+       if(!req){
+        throw new NotFoundException('Request does not exist.')
+       }
+       if(req.status === DocumentRequestStatus.Approved || req.status === DocumentRequestStatus.Rejected ){
+        throw new BadRequestException('Cannot upload file!')
+       }
+       req.documentPath = file.path
+       req.status = DocumentRequestStatus.Reviewing
+       return await this.requestRepository.save(req)
+     
     }
 
 }
