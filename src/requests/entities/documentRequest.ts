@@ -19,6 +19,8 @@ export class DocumentRequest {
     createdAt!: Date
     @UpdateDateColumn()
     updatedAt!: Date
+    @Column({nullable: true})
+    documentPath?: string
     @ManyToOne(()=> Client, (client)=> client.requests)
     client!: Client
 
