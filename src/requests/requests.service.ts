@@ -44,7 +44,9 @@ export class RequestsService {
     }
 
     async saveDocument(requestId: number ,file: Express.Multer.File ){
-
+       if(!file){
+        throw new BadRequestException('No file uploaded or file rejected')
+       }
        // fetch the request
        const req = await this.requestRepository.findOneBy({id: requestId})
        if(!req){
