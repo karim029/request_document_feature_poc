@@ -9,11 +9,20 @@ import { diskStorage } from 'multer';
 
 @Module({
   imports: [TypeOrmModule.forFeature([DocumentRequest, Client]),MulterModule.register({
+    limits: {fileSize: 5 * 1024 * 1024},
+    fileFilter(req, file, callback) {
+      if(!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)){
+        return callback(null, false)
+      }
+      callback(null, true)
+    },
     storage: diskStorage({
       destination: './uploads',
-      filename: (req, file, cb)=>{
-        const filename = `${Date.now()}-${file.originalname}`
-        cb(null,filename)
+      filename: (req, file, callback)=>{
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+        const originalName = file.originalname.replace(/\s+/g, '-')
+        const filename = `${uniqueSuffix}-${originalName}`
+        callback(null,filename)
       }
     })
   })],
