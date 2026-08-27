@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create.request.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Express } from 'express';
+import { UpdateRequestDto } from './dto/update.request.dto';
 type MulterFile = Express.Multer.File
 
 @Controller('requests')
@@ -28,5 +29,10 @@ export class RequestsController {
     @UseInterceptors(FileInterceptor('file'))
     uploadRequestFile(@Param('id',ParseIntPipe) requestId: number, @UploadedFile() file: MulterFile){
       return this.requestsService.saveDocument(requestId, file)
+    }
+
+    @Patch('review/:id')
+    updateRequestStatus(@Param('id',ParseIntPipe) id: number,@Body()  updateRequestDto: UpdateRequestDto){
+        return this.requestsService.updateStatus(id, updateRequestDto)
     }
 }
