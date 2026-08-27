@@ -13,13 +13,13 @@ export class DocumentRequest {
     description?: string
     @Column({type: 'enum', enum: DocumentRequestStatus, default: DocumentRequestStatus.Pending })
     status!: DocumentRequestStatus 
-    @Column({nullable: true})
-    rejectionReason?: string
+    @Column({ type: 'varchar', length: 255, nullable: true }) // my sql doesn't support type interference 
+    rejectionReason?: string | null
     @CreateDateColumn()
     createdAt!: Date
     @UpdateDateColumn()
     updatedAt!: Date
-    @Column({nullable: true})
+    @Column({ type: 'varchar', length: 255, nullable: true })
     documentPath?: string
     @ManyToOne(()=> Client, (client)=> client.requests)
     client!: Client
