@@ -7,6 +7,7 @@ import { Accountant } from './accountants/entities/accountant.entity';
 import { Client } from './clients/entities/client.entity';
 import { DocumentRequest } from './requests/entities/documentRequest';
 import { RequestsModule } from './requests/requests.module';
+import { AcountantsModule } from './accountants/acountants.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -26,7 +27,8 @@ import { RequestsModule } from './requests/requests.module';
       synchronize: true
     })
   }),
-  RequestsModule
+  RequestsModule,
+  AcountantsModule
 
 ],
   controllers: [AppController],

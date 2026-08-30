@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { DocumentRequestStatus } from "./documentRequest-status";
-import { Client } from "src/clients/entities/client.entity";
+import { Client } from "../../clients/entities/client.entity";
 
 @Entity()
 export class DocumentRequest {
