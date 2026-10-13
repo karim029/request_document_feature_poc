@@ -3,14 +3,15 @@
 Accountants on the mazeed ops currently request documents from clients
 informally, via WhatsApp. This feature replaces that with a structured,
 trackable workflow: an accountant creates a document request tied to a
-specific client, the client submits the document through mazeed ops ,
+specific client, the client submits the document through mazeed ops,
 and the accountant reviews it, approving or rejecting with a reason.
 
 ## Tech Stack
 - Backend: NestJS + TypeScript
 - Database: MySQL (via TypeORM)
-- File storage: local disk (see Limitations)
-- Containerization: Docker (MySQL only)
+- File storage: local disk (see Known Limitations)
+- Containerization: Docker (database only)
+- CI: GitHub Actions (tests and production dependency audit)
 
 ## Architecture Overview
 The core feature lives in `RequestsModule`, following the standard
@@ -22,23 +23,29 @@ domain:
   (`pending` → `reviewing` → `approved`/`rejected`), an optional
   rejection reason, and the path to the submitted file.
 
-Validation is handled via DTOs (`class-validator`), errors via custom
-exception filters, and all successful responses are wrapped in a
-consistent shape via a global interceptor.
+Validation is handled via DTOs (`class-validator`), errors via NestJS
+built-in exception filters, and all successful responses are wrapped in
+a consistent shape via a global interceptor.
+
+## Prerequisites
+- Node.js <Node"26" version from `node -v`> and npm
+- Docker (runs the database only; the app itself runs locally)
 
 ## Local Setup
-1. Clone the repo
-2. Create a `.env` file with:
+1. Clone the repo.
+2. Create a `.env` file in the project root. The values must match the
+   database defined in `compose.yaml`:
 
-DB_HOST=localhost
-DB_PORT=3306
-DB_USERNAME=<your value>
-DB_PASSWORD=<your value>
-DB_DATABASE=<your value>
+        DB_HOST=localhost
+        DB_PORT=3306
+        DB_USERNAME=<MYSQL_USER from compose.yaml>
+        DB_PASSWORD=<MYSQL_PASSWORD from compose.yaml>
+        DB_DATABASE=<MYSQL_DATABASE from compose.yaml>
 
-3. Start the database: `docker-compose up -d`
+3. Start the database: `docker compose up -d` (wait a few seconds for
+   MySQL to be ready).
 4. Install dependencies: `npm install`
-5. Run the app: `npm run start:dev`
+5. Run the app: `npm run start:dev` (listens on port <3000 from main.ts>)
 6. (Optional) Seed demo data: `npm run seed`
 
 ## API Endpoints
@@ -48,8 +55,17 @@ DB_DATABASE=<your value>
 | GET | `/requests` | Returns all document requests |
 | GET | `/requests/:id` | Returns a single request by id (404 if not found) |
 | POST | `/requests` | Creates a new request (`title`, `clientId`, optional `description`) |
-| POST | `/requests/:id/upload` | Client submits a document (`multipart/form-data`, field `file`); auto-transitions status to `reviewing` |
-| PATCH | `/requests/review/:id` | Accountant approves/rejects a request currently `reviewing` (`status`, optional `rejectionReason`) |
+| POST | `/requests/upload/:id` | Client submits a document (`multipart/form-data`, field `file`; jpg, jpeg, png or pdf, max 5 MB). Blocked once the request is approved. Moves status to `reviewing` |
+| PATCH | `/requests/review/:id` | Accountant approves/rejects a request currently `reviewing` (`status`, optional `rejectionReason`; a reason is required when rejecting) |
+
+## Testing
+- `npm test` runs the unit tests. They cover the review and upload rules
+  in `RequestsService`, using mocked repositories, so no database is
+  needed.
+- CI runs the tests and a production dependency audit
+  (`npm audit --omit=dev`) on every push.
+- A Postman collection with all endpoints (including descriptions and
+  example bodies) is available in `/postman`.
 
 ## Known Limitations
 This is a proof-of-concept, scoped deliberately to demonstrate the
@@ -65,7 +81,3 @@ core workflow rather than production-readiness:
 - Files are stored on local disk, not cloud storage (e.g. S3).
 - The seed script is not idempotent — running it multiple times will
   create duplicate demo records. Run once on a fresh database.
-
-## Testing
-A Postman collection with all endpoints (including descriptions and
-example bodies) is available in `/postman`.
