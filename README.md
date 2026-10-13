@@ -22,7 +22,7 @@ domain:
   (`pending` → `reviewing` → `approved`/`rejected`), an optional
   rejection reason, and the path to the submitted file.
 
-Validation is handled via DTOs (`class-validator`), errors via custom
+Validation is handled via DTOs (`class-validator`), errors via Nestjs built-in
 exception filters, and all successful responses are wrapped in a
 consistent shape via a global interceptor.
 
@@ -48,7 +48,7 @@ DB_DATABASE=<your value>
 | GET | `/requests` | Returns all document requests |
 | GET | `/requests/:id` | Returns a single request by id (404 if not found) |
 | POST | `/requests` | Creates a new request (`title`, `clientId`, optional `description`) |
-| POST | `/requests/:id/upload` | Client submits a document (`multipart/form-data`, field `file`); auto-transitions status to `reviewing` |
+| POST | `/requests/upload/:id` | Client submits a document (`multipart/form-data`, field `file`); auto-transitions status to `reviewing` |
 | PATCH | `/requests/review/:id` | Accountant approves/rejects a request currently `reviewing` (`status`, optional `rejectionReason`) |
 
 ## Known Limitations
