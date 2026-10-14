@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Accountant } from './entities/accountant.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Accountant])],
-    exports: [TypeOrmModule]
+  imports: [TypeOrmModule.forFeature([Accountant])],
+  exports: [TypeOrmModule],
 })
-export class AcountantsModule {}
+export class AccountantsModule {}

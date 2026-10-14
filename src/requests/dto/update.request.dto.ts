@@ -1,14 +1,12 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from "class-validator";
-import { DocumentRequestStatus } from "../entities/documentRequest-status";
-import { IsNull } from "typeorm";
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { DocumentRequestStatus } from '../entities/documentRequest-status';
 
 export class UpdateRequestDto {
+  @IsNotEmpty()
+  @IsEnum(DocumentRequestStatus)
+  status!: DocumentRequestStatus;
 
-    @IsNotEmpty()
-    @IsEnum(DocumentRequestStatus)
-    status!: DocumentRequestStatus
-
-    @IsString()
-    @IsOptional()
-    rejectionReason?: string | null
+  @IsString()
+  @IsOptional()
+  rejectionReason?: string | null;
 }
