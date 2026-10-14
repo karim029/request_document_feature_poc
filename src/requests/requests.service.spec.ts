@@ -25,8 +25,8 @@ describe('RequestsService', () => {
     service = module.get<RequestsService>(RequestsService);
   });
 
-  describe('saveDocument', () => {
-
+  describe('updateStatus', () => {
+    
     it('throws when request is not in Reviewing', async () => {
       requestRepo.findOneBy.mockResolvedValue({ id: 1, status: DocumentRequestStatus.Pending })
       await expect(service.updateStatus(1, { status: DocumentRequestStatus.Approved })).rejects.toThrow('Request can only be reviewed if it is currently in Reviewing status')
@@ -120,5 +120,18 @@ describe('RequestsService', () => {
       );
     });
   });
+   describe('getRequest', ()=>{
+    it('throws when a request is not found', async()=>{
+      requestRepo.findOneBy.mockResolvedValue(null)
+      await expect(service.getRequest(3)).rejects.toThrow('No request found with this id')
+    })
+  })
+
+  describe('createRequest',()=>{
+    it('throws when a client is not found', async()=>{
+      clientRepo.findOneBy.mockResolvedValue(null)
+      await expect(service.createRequest({clientId: 1, title: 'test', description: 'lorem ipsum'})).rejects.toThrow('Client does not exist.')
+    })
+  })
 
 });
