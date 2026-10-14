@@ -13,11 +13,10 @@ export class TransformMessageInterceptor<T> implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
 
     const ctx = context.switchToHttp()
-    const res = ctx.getResponse<Response>()
     
 
     return next.handle().pipe(map((data: T) => ({
-      success: res.statusCode ?? 200,
+      success: true,
       data: data,
       timeStamp: new Date().toISOString()
 
