@@ -28,25 +28,22 @@ built-in exception filters, and all successful responses are wrapped in
 a consistent shape via a global interceptor.
 
 ## Prerequisites
-- Node.js <Node"26" version from `node -v`> and npm
+- Node.js 26 and npm
 - Docker (runs the database only; the app itself runs locally)
 
 ## Local Setup
 1. Clone the repo.
-2. Create a `.env` file in the project root. The values must match the
-   database defined in `compose.yaml`:
-
-        DB_HOST=localhost
-        DB_PORT=3306
-        DB_USERNAME=<MYSQL_USER from compose.yaml>
-        DB_PASSWORD=<MYSQL_PASSWORD from compose.yaml>
-        DB_DATABASE=<MYSQL_DATABASE from compose.yaml>
-
+2. Copy `.env.example` to `.env` and set your own passwords. The database
+   container and the app both read this one file, so the values stay in sync.
 3. Start the database: `docker compose up -d` (wait a few seconds for
    MySQL to be ready).
 4. Install dependencies: `npm install`
-5. Run the app: `npm run start:dev` (listens on port <3000 from main.ts>)
+5. Run the app: `npm run start:dev` (listens on port 3000)
 6. (Optional) Seed demo data: `npm run seed`
+
+Note: the database credentials are only applied the first time the
+container starts. To change them later, remove the volume with
+`docker compose down -v` and start again.
 
 ## API Endpoints
 
