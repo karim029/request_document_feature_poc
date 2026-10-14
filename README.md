@@ -23,9 +23,9 @@ domain:
   (`pending` → `reviewing` → `approved`/`rejected`), an optional
   rejection reason, and the path to the submitted file.
 
-Validation is handled via DTOs (`class-validator`), errors via NestJS
-built-in exception filters, and all successful responses are wrapped in
+Validation is handled via DTOs (`class-validator`), error responses are wrapped inside a global exception filter, and all successful responses are wrapped in
 a consistent shape via a global interceptor.
+both errors and successes share one shape
 
 ## Prerequisites
 - Node.js 26 and npm
