@@ -33,6 +33,18 @@ describe('RequestsService', () => {
       expect(requestRepo.save).not.toHaveBeenCalled()
 
     })
+     it('throws when request is not in Reviewing and in Approved', async () => {
+      requestRepo.findOneBy.mockResolvedValue({ id: 1, status: DocumentRequestStatus.Approved })
+      await expect(service.updateStatus(1, { status: DocumentRequestStatus.Approved })).rejects.toThrow('Request can only be reviewed if it is currently in Reviewing status')
+      expect(requestRepo.save).not.toHaveBeenCalled()
+
+    })
+     it('throws when request is not in Reviewing and in Rejected', async () => {
+      requestRepo.findOneBy.mockResolvedValue({ id: 1, status: DocumentRequestStatus.Rejected })
+      await expect(service.updateStatus(1, { status: DocumentRequestStatus.Approved })).rejects.toThrow('Request can only be reviewed if it is currently in Reviewing status')
+      expect(requestRepo.save).not.toHaveBeenCalled()
+
+    })
     it('throws when the request does not exist', async () => {
       requestRepo.findOneBy.mockResolvedValue(null)
       await expect(service.updateStatus(1, { status: DocumentRequestStatus.Approved })).rejects.toThrow('Request does not exist.')
