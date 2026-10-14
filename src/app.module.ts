@@ -7,30 +7,30 @@ import { Accountant } from './accountants/entities/accountant.entity';
 import { Client } from './clients/entities/client.entity';
 import { DocumentRequest } from './requests/entities/documentRequest';
 import { RequestsModule } from './requests/requests.module';
-import { AcountantsModule } from './accountants/acountants.module';
+import { AccountantsModule } from './accountants/acountants.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({
-    isGlobal: true,
-  }),
-  TypeOrmModule.forRootAsync({
-    imports: [ConfigModule],
-    inject: [ConfigService],
-    useFactory: (configService: ConfigService)=> ({
-      type: 'mysql',
-      host: configService.get('DB_HOST'),
-      port: configService.get('DB_PORT'),
-      username: configService.get('DB_USERNAME'),
-      password: configService.get('DB_PASSWORD'),
-      database: configService.get('DB_DATABASE'),
-      entities: [Accountant, Client, DocumentRequest],
-      synchronize: true
-    })
-  }),
-  RequestsModule,
-  AcountantsModule
-
-],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'mysql',
+        host: configService.get('DB_HOST'),
+        port: configService.get('DB_PORT'),
+        username: configService.get('DB_USERNAME'),
+        password: configService.get('DB_PASSWORD'),
+        database: configService.get('DB_DATABASE'),
+        entities: [Accountant, Client, DocumentRequest],
+        synchronize: true,
+      }),
+    }),
+    RequestsModule,
+    AccountantsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
