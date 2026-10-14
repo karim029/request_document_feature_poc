@@ -1,10 +1,9 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { Response } from 'express';
 import {map} from 'rxjs/operators'
 export interface ResponseMessage<T>{
-  success: number,
-  timeStamp: string,
+  success: boolean,
+  timestamp: string,
   data: T
 }
 
@@ -12,14 +11,10 @@ export interface ResponseMessage<T>{
 export class TransformMessageInterceptor<T> implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
 
-    const ctx = context.switchToHttp()
-    const res = ctx.getResponse<Response>()
-    
-
     return next.handle().pipe(map((data: T) => ({
-      success: res.statusCode ?? 200,
+      success: true,
+      timestamp: new Date().toISOString(),
       data: data,
-      timeStamp: new Date().toISOString()
 
     })))
   }
