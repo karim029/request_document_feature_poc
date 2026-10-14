@@ -131,6 +131,8 @@ describe('RequestsService', () => {
     it('throws when a client is not found', async()=>{
       clientRepo.findOneBy.mockResolvedValue(null)
       await expect(service.createRequest({clientId: 1, title: 'test', description: 'lorem ipsum'})).rejects.toThrow('Client does not exist.')
+      expect(requestRepo.save).not.toHaveBeenCalled()
+
     })
   })
 
