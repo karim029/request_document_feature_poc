@@ -10,9 +10,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { RequestsService } from './requests.service';
-import { CreateRequestDto } from './dto/create.request.dto';
+import { CreateRequestDto } from './dto/create-request.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { UpdateRequestDto } from './dto/update.request.dto';
+import { UpdateRequestDto } from './dto/update-request.dto';
 type MulterFile = Express.Multer.File;
 
 @Controller('requests')

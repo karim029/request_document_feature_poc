@@ -1,5 +1,5 @@
 import { Accountant } from 'src/accountants/entities/accountant.entity';
-import { DocumentRequest } from 'src/requests/entities/documentRequest';
+import { DocumentRequest } from 'src/requests/entities/document-request.entity';
 import {
   Column,
   Entity,

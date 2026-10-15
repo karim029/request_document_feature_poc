@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { GlobalExceptionFilter } from './exception.filter';
+import { GlobalExceptionFilter } from './global-exception.filter';
 describe('GlobalExceptionFilter', () => {
   let filter: GlobalExceptionFilter;
   let json: jest.Mock<void, [Record<string, unknown>]>;

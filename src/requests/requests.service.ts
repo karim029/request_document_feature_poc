@@ -4,12 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DocumentRequest } from './entities/documentRequest';
+import { DocumentRequest } from './entities/document-request.entity';
 import { Repository } from 'typeorm';
-import { CreateRequestDto } from './dto/create.request.dto';
+import { CreateRequestDto } from './dto/create-request.dto';
 import { Client } from 'src/clients/entities/client.entity';
-import { DocumentRequestStatus } from './entities/documentRequest-status';
-import { UpdateRequestDto } from './dto/update.request.dto';
+import { DocumentRequestStatus } from './entities/document-request-status.enum';
+import { UpdateRequestDto } from './dto/update-request.dto';
 
 @Injectable()
 export class RequestsService {

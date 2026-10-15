@@ -1,11 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DocumentRequest } from './requests/entities/documentRequest';
+import { DocumentRequest } from './requests/entities/document-request.entity';
 import { Accountant } from './accountants/entities/accountant.entity';
 import { Client } from './clients/entities/client.entity';
 import { Repository } from 'typeorm';
-import { DocumentRequestStatus } from './requests/entities/documentRequest-status';
+import { DocumentRequestStatus } from './requests/entities/document-request-status.enum';
 
 async function seed() {
   const app = await NestFactory.createApplicationContext(AppModule);

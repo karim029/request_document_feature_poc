@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { DocumentRequestStatus } from './documentRequest-status';
+import { DocumentRequestStatus } from './document-request-status.enum';
 import { Client } from '../../clients/entities/client.entity';
 
 @Entity()
