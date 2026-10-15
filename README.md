@@ -8,10 +8,10 @@ and the accountant reviews it, approving or rejecting with a reason.
 
 ## Tech Stack
 - Backend: NestJS + TypeScript
-- Database: MySQL (via TypeORM)
+- Database: MariaDB 11 (via TypeORM)
 - File storage: local disk (see Known Limitations)
 - Containerization: Docker (database only)
-- CI: GitHub Actions (tests and production dependency audit)
+- CI: GitHub Actions (lint, tests and production dependency audit)
 
 ## Architecture Overview
 The core feature lives in `RequestsModule`, following the standard
@@ -23,9 +23,10 @@ domain:
   (`pending` → `reviewing` → `approved`/`rejected`), an optional
   rejection reason, and the path to the submitted file.
 
-Validation is handled via DTOs (`class-validator`), error responses are wrapped inside a global exception filter, and all successful responses are wrapped in
-a consistent shape via a global interceptor.
-both errors and successes share one shape
+Validation is handled via DTOs (`class-validator`). Successful responses
+are wrapped by a global interceptor and errors by a global exception
+filter, so both share one response shape. Unexpected errors return a
+generic message to the client, while the details go to the server log.
 
 ## Prerequisites
 - Node.js 26 and npm
@@ -36,7 +37,7 @@ both errors and successes share one shape
 2. Copy `.env.example` to `.env` and set your own passwords. The database
    container and the app both read this one file, so the values stay in sync.
 3. Start the database: `docker compose up -d` (wait a few seconds for
-   MySQL to be ready).
+   MariaDB to be ready).
 4. Install dependencies: `npm install`
 5. Run the app: `npm run start:dev` (listens on port 3000)
 6. (Optional) Seed demo data: `npm run seed`
@@ -57,10 +58,10 @@ container starts. To change them later, remove the volume with
 
 ## Testing
 - `npm test` runs the unit tests. They cover the review and upload rules
-  in `RequestsService`, using mocked repositories, so no database is
-  needed.
-- CI runs the tests and a production dependency audit
-  (`npm audit --omit=dev`) on every push.
+  in `RequestsService`, plus the exception filter and response
+  interceptor, using mocks, so no database is needed.
+- CI runs lint (`npm run lint:ci`), the tests and a production
+  dependency audit (`npm audit --omit=dev`) on every push.
 - A Postman collection with all endpoints (including descriptions and
   example bodies) is available in `/postman`.
 
