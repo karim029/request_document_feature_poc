@@ -2,8 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RequestsService } from './requests.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Client } from 'src/clients/entities/client.entity';
-import { DocumentRequest } from './entities/documentRequest';
-import { DocumentRequestStatus } from './entities/documentRequest-status';
+import { DocumentRequest } from './entities/document-request.entity';
+import { DocumentRequestStatus } from './entities/document-request-status.enum';
 
 describe('RequestsService', () => {
   let service: RequestsService;

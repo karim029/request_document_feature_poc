@@ -1,6 +1,6 @@
 import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { lastValueFrom, of } from 'rxjs';
-import { TransformMessageInterceptor } from './transform.message.interceptor';
+import { TransformMessageInterceptor } from './transform-message.interceptor';
 
 describe('TransformMessageInterceptor', () => {
   it('wraps the handler result in the success envelope', async () => {

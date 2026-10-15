@@ -5,9 +5,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Accountant } from './accountants/entities/accountant.entity';
 import { Client } from './clients/entities/client.entity';
-import { DocumentRequest } from './requests/entities/documentRequest';
+import { DocumentRequest } from './requests/entities/document-request.entity';
 import { RequestsModule } from './requests/requests.module';
-import { AccountantsModule } from './accountants/acountants.module';
+import { AccountantsModule } from './accountants/accountants.module';
 
 @Module({
   imports: [
