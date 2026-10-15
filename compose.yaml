@@ -2,7 +2,7 @@
 
 services:
   mariadb:
-    image: mariadb:latest
+    image: mariadb:11
     container_name: mariadb_db
     restart: unless-stopped
     ports:
