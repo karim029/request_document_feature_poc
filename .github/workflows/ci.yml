@@ -11,5 +11,6 @@ jobs:
         with:
           node-version: "26"
       - run: npm ci
+      - run: npm run lint:ci
       - run: npm test
       - run: npm audit --omit=dev
