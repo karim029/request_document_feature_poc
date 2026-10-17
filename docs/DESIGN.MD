@@ -190,6 +190,20 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 
 Indexes are created after the backfill, so they are built once on the final data. On a large table the backfill runs in batches. Each migration is verified by running `up`, then `down`, then `up` again on a clean database.
 
+## 9. What I would change at 100M rows
+
+The event table is the largest table: each request creates several events, so 100M requests means roughly 300M to 500M events. These are the changes I would make.
+
+- **Partition the event table by month** (`created_at`) and archive old partitions, instead of moving rows with a job, because deleting hundreds of millions of rows is slow. The cost is that MariaDB partitioned tables do not support foreign keys, so integrity moves into the application, and the history endpoint must also reach archived data.
+- **Archive old closed requests** the same way. The inbox mostly touches open and recent requests.
+- **Dashboard:** if the number of requests per accountant grows, move from live aggregation and a cache to a rollup table, accepting the extra write cost.
+- **Review the indexes.** Each index costs write time and memory, and at this size the indexes no longer fit in memory, so drop unused ones.
+- **Online schema changes:** run large backfills in batches, or with an online schema-change tool.
+- **Read replica** for dashboard and history reads.
+- **Files:** a child table with one row per upload (several documents per request and kept file history), and object storage instead of local disk.
+- **Users:** a single `user` table instead of separate accountant and client tables.
+- **Authentication:** JWT in place of the actor header.
+
 ## 10. Assumptions and what was cut
 
 - **Who may review.** `accountant_id` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewer_id` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
