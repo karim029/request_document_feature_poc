@@ -64,6 +64,13 @@ erDiagram
         int actor_client_id FK
         datetime created_at
     }
+        bulk_batch {
+        int id PK
+        string idempotency_key UK
+        string request_hash
+        text response
+        datetime created_at
+    }
 ```
 
 Every event has exactly one actor: exactly one of `actor_accountant_id` and `actor_client_id` is set, enforced by a `CHECK` constraint in the migration. A newly created request has `from_status` NULL.
@@ -184,7 +191,7 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 | 1 | Add `due_date`, `reviewer_id`, `reviewed_at`, the file metadata columns and `version` (default 0). Add `accountant_id` as nullable. Widen `description` to text. | Drop the added columns and restore the previous `description` type. |
 | 2 | Backfill `accountant_id` from each request's client. Copy `document_path` into `storage_key`. | Nothing. The copied data is derived, and the `down` of step 1 drops the columns. |
 | 3 | Make `accountant_id` `NOT NULL` and add the foreign keys. | Drop the foreign keys and make `accountant_id` nullable again. |
-| 4 | Create `document_request_event` with its foreign keys and a `CHECK` that exactly one actor column is set. | Drop the table. |
+| 4 | Create `document_request_event` with its foreign keys and a `CHECK` that exactly one actor column is set and `bulk_batch` with a unique index on `idempotency_key` | Drop the table. |
 | 5 | Create the inbox indexes and the history index. | Drop the indexes. |
 | 6 | Drop `document_path`. | Re-add `document_path` and copy the values back from `storage_key`. |
 
@@ -207,3 +214,6 @@ The event table is the largest table: each request creates several events, so 10
 ## 10. Assumptions and what was cut
 
 - **Who may review.** `accountant_id` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewer_id` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
+
+- **Open, overdue and outstanding.** A request is open while its status is `pending` or `reviewing`. It is overdue when it is open and its `due_date` has passed. Outstanding means open. Finished requests (approved or rejected) are never overdue, even if the decision came after the due date.
+- **Idempotency key for bulk create.** The client sends a unique key (a UUID it generates) with each bulk request. The server stores it in a small `bulk_batch` table, with a hash of the request body and the response, in the same transaction that creates the requests. The key is unique, so a retry, or two retries at once, cannot create a second batch: the server finds the existing key and returns the stored response. The same key with a different body is rejected. The key belongs to the batch, so the large table needs no extra column or index. Old keys are deleted after a retention period, for example 24 hours.
