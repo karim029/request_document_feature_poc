@@ -92,3 +92,45 @@ I would use JWT bearer tokens in production. A guard verifies the signature and 
 | History: `WHERE request_id = ? ORDER BY created_at, id` | `(request_id, created_at, id)` on `document_request_event` | `request_id` is the only equality, so it opens the folder. `created_at` then `id` give the order, with `id` as the tie-breaker for equal timestamps. | Events are only inserted, never updated or deleted, so one entry per insert. |
 
 **Dashboard candidates, decided after measuring the naive version:** top clients `(accountant_id, status, client_id)`, and turnaround, which reads the event table.
+
+## 6. Concurrency design
+
+### The problem
+
+Reviewing a request reads the row, checks the status in code, and then writes the result. Those are three separate steps, and another request can slip in between them. That causes two problems:
+
+- Two accountants approve and reject the same request at the same moment. Both pass the check, and the last write silently overwrites the first.
+- A reviewer opens a request, the client re-uploads a corrected file, and the reviewer approves a file they never saw. The status is still `reviewing`, so a status check does not notice.
+
+A stricter check in the code cannot fix this, because the gap between the check and the write still exists.
+
+### Options considered
+
+1. **Conditional update.** Put the check in the write: `UPDATE ... WHERE id = ? AND status = 'reviewing'`. It is atomic, simple, and needs no extra column. Its downside is that it only protects the condition written in the `WHERE`, so it misses other changes, such as a re-upload while the status stays `reviewing`.
+2. **Row lock (pessimistic).** Read inside a transaction with `SELECT ... FOR UPDATE`, which blocks anyone else touching that one row until the transaction ends. It is always correct. Its downsides are that the lock is held for the whole transaction, it holds a database connection, it cannot span the time a person spends reading a document, and locking several rows in different orders can deadlock.
+3. **Version column (optimistic).** Each row carries a counter that increases on every write. The update only succeeds if the version still matches the one the client read. It takes no lock, and it detects any change to the row. Its costs are one extra column, the client must send back the version it saw, and every write path must bump it.
+
+### Choice
+
+I chose the version column, for these reasons:
+
+- A reviewer reads for an unpredictable time, so a row lock cannot cover the gap between reading and clicking. A version travels with the click.
+- Collisions on a single request are rare, so optimistic locking costs almost nothing in the normal case, and fails safely with a 409 in the rare one.
+- It catches the re-upload case that a status-only check misses.
+- It does not replace history. The append-only `document_request_event` table records who changed what and when.
+
+For a short automated operation with no human in the middle, a conditional update would also be fine.
+
+### How it works
+
+Every response that returns a request includes its `version`. The review request must send back the version the reviewer saw. In one transaction, the server:
+
+1. Runs `UPDATE document_request SET status = ?, reviewer_id = ?, reviewed_at = ?, version = version + 1 WHERE id = ? AND version = ? AND status = 'reviewing'`.
+2. If one row changed, inserts the matching `document_request_event` row (from status, to status, actor, reason).
+3. If zero rows changed, rolls back and returns `409 Conflict`, because someone changed the request first.
+
+The upload path follows the same pattern and also bumps `version`. If it did not, a re-upload would go undetected.
+
+### How it is proven
+
+An integration test against a real MariaDB sends 20 parallel approve and reject calls for the same request. Exactly one returns 200, the other 19 return 409, and the request's event history shows one consistent transition.
