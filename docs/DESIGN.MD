@@ -175,6 +175,21 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 - **Staleness:** live numbers are exact. Cached numbers can be up to 30 seconds old, which is acceptable because the dashboard is an overview, and the inbox is where exact data matters.
 - **What I give up:** with a cache, numbers up to 30 seconds old, and an in-memory cache is per application instance, so several instances would need a shared cache. A rollup would instead make every status change slower and add a risk of drift.
 
+## 8. Migrations plan
+
+`synchronize` is turned off. Schema changes are made only through migrations, each with an `up` and a `down`, and database credentials come from `.env`. With `synchronize: true` nobody reviews a schema change, there is no history and no way back, and a column rename can be applied as drop-and-add, which loses the column's data.
+
+| # | Up | Down |
+| --- | --- | --- |
+| 1 | Add `due_date`, `reviewer_id`, `reviewed_at`, the file metadata columns and `version` (default 0). Add `accountant_id` as nullable. Widen `description` to text. | Drop the added columns and restore the previous `description` type. |
+| 2 | Backfill `accountant_id` from each request's client. Copy `document_path` into `storage_key`. | Nothing. The copied data is derived, and the `down` of step 1 drops the columns. |
+| 3 | Make `accountant_id` `NOT NULL` and add the foreign keys. | Drop the foreign keys and make `accountant_id` nullable again. |
+| 4 | Create `document_request_event` with its foreign keys and a `CHECK` that exactly one actor column is set. | Drop the table. |
+| 5 | Create the inbox indexes and the history index. | Drop the indexes. |
+| 6 | Drop `document_path`. | Re-add `document_path` and copy the values back from `storage_key`. |
+
+Indexes are created after the backfill, so they are built once on the final data. On a large table the backfill runs in batches. Each migration is verified by running `up`, then `down`, then `up` again on a clean database.
+
 ## 10. Assumptions and what was cut
 
 - **Who may review.** `accountant_id` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewer_id` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
