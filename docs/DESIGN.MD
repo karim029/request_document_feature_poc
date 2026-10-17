@@ -167,6 +167,14 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 - **Choice:** copy `accountant_id` onto the request, so the inbox is a single index lookup with no join and no sort.
 - **What I give up:** the same fact is stored in two places and could disagree. If a client moved to another accountant, old requests would still show the old one. The rule that manages this: the value is set once, when the request is created, from the client's accountant, and it means the owner at creation time. Clients do not change accountant in this take-home.
 
+### Dashboard: live aggregation vs rollup table
+
+- **Question:** how the accountant dashboard (`GET /accountants/:id/dashboard`) produces its numbers, and how stale they may be.
+- **Options:** live aggregation (run the queries on every load); a rollup table (precomputed numbers per accountant, updated with each status change or by a job); or a short-lived cache of the live result.
+- **Choice:** build the live version first and measure it against the target (p95 under 300 ms at 20 concurrent users on 1,000,000 rows). If it misses, add a short cache of about 30 seconds first, because it adds no cost to writes and cannot drift from the data. A rollup table only if the cache is not enough.
+- **Staleness:** live numbers are exact. Cached numbers can be up to 30 seconds old, which is acceptable because the dashboard is an overview, and the inbox is where exact data matters.
+- **What I give up:** with a cache, numbers up to 30 seconds old, and an in-memory cache is per application instance, so several instances would need a shared cache. A rollup would instead make every status change slower and add a risk of drift.
+
 ## 10. Assumptions and what was cut
 
 - **Who may review.** `accountant_id` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewer_id` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
