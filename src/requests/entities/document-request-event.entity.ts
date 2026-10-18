@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { DocumentRequest } from "./document-request.entity";
 import { DocumentRequestStatus } from "./document-request-status.enum";
 import { Accountant } from "src/accountants/entities/accountant.entity";
