@@ -87,6 +87,8 @@ Every event has exactly one actor: exactly one of `actor_accountant_id` and `act
 | `storage_key`, `original_name`, `mime_type`, `file_size`, `checksum` | `document_request` | Replace `documentPath`, so the API never exposes a server path and the file is described properly. |
 | `document_request_event` | new table | Append-only log of every change: who, from what, to what, when and why. Gives the history endpoint, every rejection reason, and the review turnaround for the dashboard. |
 
+The brief's example event table has a single `actor_id`. Here it is two columns, `actor_accountant_id` and `actor_client_id`, with a `CHECK` that exactly one is set. Accountants and clients are different tables, and a foreign key can only point at one table, so this keeps real foreign keys without merging them into a single `user` table, which is listed as a later change in section 9.
+
 ## 4. Actor assumption
 
 The server identifies the actor from an `X-Actor-Id` header. It checks that the user exists and that their role fits the action (an accountant creates, reviews, approves and rejects requests; a client uploads), and it records the id in the event row so the history shows who acted.
