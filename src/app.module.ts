@@ -25,7 +25,7 @@ import { AccountantsModule } from './accountants/accountants.module';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
         entities: [Accountant, Client, DocumentRequest],
-        synchronize: true,
+        synchronize: false,
       }),
     }),
     RequestsModule,
