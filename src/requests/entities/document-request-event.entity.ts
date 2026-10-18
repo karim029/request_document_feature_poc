@@ -28,5 +28,5 @@ export class DocumentRequestEvent {
   @ManyToOne(()=> Client ,{nullable: true})
   actorClient?: Client | null
   @ManyToOne(()=>DocumentRequest, {nullable: false})
-  requestId!: DocumentRequest
+  request!: DocumentRequest
 }
