@@ -190,12 +190,15 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 
 | # | Up | Down |
 | --- | --- | --- |
+| 0 | Create the original schema: `accountant`, `client` and `document_request` (with `document_path`). | Drop the three tables. |
 | 1 | Add `due_date`, `reviewer_id`, `reviewed_at`, the file metadata columns and `version` (default 0). Add `accountant_id` as nullable. Widen `description` to text. | Drop the added columns and restore the previous `description` type. |
 | 2 | Backfill `accountant_id` from each request's client. Copy `document_path` into `storage_key`. | Nothing. The copied data is derived, and the `down` of step 1 drops the columns. |
 | 3 | Make `accountant_id` `NOT NULL` and add the foreign keys. | Drop the foreign keys and make `accountant_id` nullable again. |
 | 4 | Create `document_request_event` with its foreign keys and a `CHECK` that exactly one actor column is set and `bulk_batch` with a unique index on `idempotency_key` | Drop the table. |
 | 5 | Create the inbox indexes and the history index. | Drop the indexes. |
 | 6 | Drop `document_path`. | Re-add `document_path` and copy the values back from `storage_key`. |
+
+Migration 0 exists so that a clean database can be built from migrations alone, because `synchronize` is off. It is not run against an existing development database; that database is recreated instead.
 
 Indexes are created after the backfill, so they are built once on the final data. On a large table the backfill runs in batches. Each migration is verified by running `up`, then `down`, then `up` again on a clean database.
 
