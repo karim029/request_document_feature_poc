@@ -31,6 +31,6 @@ export class DocumentRequest {
   updatedAt!: Date;
   @Column({ type: 'varchar', length: 255, nullable: true })
   documentPath?: string;
-  @ManyToOne(() => Client, (client) => client.requests)
+  @ManyToOne(() => Client, (client) => client.requests, {nullable: false})
   client!: Client;
 }
