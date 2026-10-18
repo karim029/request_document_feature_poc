@@ -16,7 +16,9 @@ export class Client {
   username!: string;
   @Column()
   email!: string;
-  @ManyToOne(() => Accountant, (accountant) => accountant.clients)
+  @ManyToOne(() => Accountant, (accountant) => accountant.clients, {
+    nullable: false,
+  })
   accountant!: Accountant;
   @OneToMany(() => DocumentRequest, (request) => request.client)
   requests!: DocumentRequest[];

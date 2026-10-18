@@ -32,8 +32,13 @@ export class RequestsService {
   }
 
   async createRequest(createRequestDto: CreateRequestDto) {
-    const client = await this.clientRepository.findOneBy({
-      id: createRequestDto.clientId,
+    const client = await this.clientRepository.findOne({
+      where: {
+        id: createRequestDto.clientId,
+      },
+      relations: {
+        accountant: true,
+      },
     });
     if (!client) {
       throw new NotFoundException('Client does not exist.');
@@ -43,6 +48,7 @@ export class RequestsService {
       title: createRequestDto.title,
       description: createRequestDto.description,
       client: client,
+      accountant: client.accountant,
     };
 
     return await this.requestRepository.save(newRequest);
@@ -62,7 +68,7 @@ export class RequestsService {
         'Cannot upload file to an already approved request.',
       );
     }
-    req.documentPath = file.path;
+    req.storageKey = file.path;
     req.status = DocumentRequestStatus.Reviewing;
     return await this.requestRepository.save(req);
   }

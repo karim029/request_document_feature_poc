@@ -7,12 +7,22 @@ import { DocumentRequestStatus } from './entities/document-request-status.enum';
 
 describe('RequestsService', () => {
   let service: RequestsService;
-  let requestRepo: { find: jest.Mock; findOneBy: jest.Mock; save: jest.Mock };
-  let clientRepo: { findOneBy: jest.Mock };
+  let requestRepo: {
+    find: jest.Mock;
+    findOneBy: jest.Mock;
+    save: jest.Mock;
+    findOne: jest.Mock;
+  };
+  let clientRepo: { findOneBy: jest.Mock; findOne: jest.Mock };
 
   beforeEach(async () => {
-    requestRepo = { find: jest.fn(), findOneBy: jest.fn(), save: jest.fn() };
-    clientRepo = { findOneBy: jest.fn() };
+    requestRepo = {
+      find: jest.fn(),
+      findOneBy: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+    };
+    clientRepo = { findOneBy: jest.fn(), findOne: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RequestsService,
@@ -160,7 +170,7 @@ describe('RequestsService', () => {
       await service.saveDocument(1, fakeFile);
       expect(requestRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          documentPath: 'uploads/test.pdf',
+          storageKey: 'uploads/test.pdf',
           status: DocumentRequestStatus.Reviewing,
         }),
       );
@@ -189,7 +199,7 @@ describe('RequestsService', () => {
 
   describe('createRequest', () => {
     it('throws when a client is not found', async () => {
-      clientRepo.findOneBy.mockResolvedValue(null);
+      clientRepo.findOne.mockResolvedValue(null);
       await expect(
         service.createRequest({
           clientId: 1,
