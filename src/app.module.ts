@@ -26,6 +26,7 @@ import { AccountantsModule } from './accountants/accountants.module';
         database: configService.get('DB_DATABASE'),
         entities: [Accountant, Client, DocumentRequest],
         synchronize: false,
+        timezone: 'Z'
       }),
     }),
     RequestsModule,
