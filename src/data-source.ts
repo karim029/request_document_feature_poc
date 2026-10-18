@@ -13,5 +13,5 @@ export const AppDataSource = new DataSource({
   synchronize: false,
   entities: [__dirname + '/**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/migrations/**/*{.js,.ts}'],
-  timezone: 'Z'
+  timezone: 'Z',
 });

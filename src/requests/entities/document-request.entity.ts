@@ -12,9 +12,9 @@ import { Client } from '../../clients/entities/client.entity';
 import { Accountant } from '../../accountants/entities/accountant.entity';
 
 @Entity()
-@Index('IDX_request_inbox_created',['accountant','status','createdAt'])
-@Index('IDX_request_inbox_due',['accountant','status','dueDate'])
-@Index('IDX_request_reviewer',['reviewer'])
+@Index('IDX_request_inbox_created', ['accountant', 'status', 'createdAt'])
+@Index('IDX_request_inbox_due', ['accountant', 'status', 'dueDate'])
+@Index('IDX_request_reviewer', ['reviewer'])
 export class DocumentRequest {
   @PrimaryGeneratedColumn()
   id!: number;
