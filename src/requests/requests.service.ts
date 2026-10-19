@@ -1,15 +1,19 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DocumentRequest } from './entities/document-request.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { Client } from 'src/clients/entities/client.entity';
 import { DocumentRequestStatus } from './entities/document-request-status.enum';
 import { UpdateRequestDto } from './dto/update-request.dto';
+import { Accountant } from 'src/accountants/entities/accountant.entity';
+import { DocumentRequestEvent } from './entities/document-request-event.entity';
 
 @Injectable()
 export class RequestsService {
@@ -17,6 +21,7 @@ export class RequestsService {
     @InjectRepository(DocumentRequest)
     private requestRepository: Repository<DocumentRequest>,
     @InjectRepository(Client) private clientRepository: Repository<Client>,
+    private readonly dataSource: DataSource
   ) {}
 
   async getAllRequests() {
@@ -73,39 +78,56 @@ export class RequestsService {
     return await this.requestRepository.save(req);
   }
 
-  async updateStatus(id: number, updateRequestDto: UpdateRequestDto) {
-    const req = await this.requestRepository.findOneBy({ id: id });
-    if (!req) {
-      throw new NotFoundException('Request does not exist.');
-    }
-    if (
-      updateRequestDto.status !== DocumentRequestStatus.Approved &&
-      updateRequestDto.status !== DocumentRequestStatus.Rejected
-    ) {
-      throw new BadRequestException(
-        'Review status must be Approved or Rejected',
-      );
-    }
-    if (req.status !== DocumentRequestStatus.Reviewing) {
-      throw new BadRequestException(
-        'Request can only be reviewed if it is currently in Reviewing status',
-      );
-    }
-    if (
-      updateRequestDto.status === DocumentRequestStatus.Rejected &&
-      !updateRequestDto.rejectionReason
-    ) {
-      throw new BadRequestException(
-        'A rejection reason is required when rejecting a request.',
-      );
-    }
-    req.status = updateRequestDto.status;
-    if (req.status === DocumentRequestStatus.Approved) {
-      req.rejectionReason = null;
-    } else {
-      req.rejectionReason = updateRequestDto.rejectionReason;
+  async updateStatus(id: number,actorId: number , updateRequestDto: UpdateRequestDto) {
+
+    if(updateRequestDto.status !== DocumentRequestStatus.Approved && updateRequestDto.status !== DocumentRequestStatus.Rejected){
+      throw new BadRequestException('Review status must be Approved or Rejected')
     }
 
-    return await this.requestRepository.save(req);
+    if(updateRequestDto.status === DocumentRequestStatus.Rejected && !updateRequestDto.rejectionReason){
+      throw new BadRequestException('A rejection reason is required when rejecting a request.')
+    }
+
+    return await this.dataSource.transaction(async(manager)=>{
+      const actor = await manager.findOneBy(Accountant, {id:actorId})
+      if(!actor){
+        throw new ForbiddenException('Only an accountant can review a request')
+      }
+      const result = await manager.createQueryBuilder().update(DocumentRequest).set(
+        {
+          status: updateRequestDto.status,
+          rejectionReason: updateRequestDto.status === DocumentRequestStatus.Approved ? null : updateRequestDto.rejectionReason,
+          reviewer: {id: actor.id},
+          reviewedAt: ()=> 'CURRENT_TIMESTAMP(6)',
+          version: ()=> 'version+1',
+        }
+      ).where('id= :id AND version = :version AND status = :reviewing',{
+        id,
+        version: updateRequestDto.version,
+        reviewing: DocumentRequestStatus.Reviewing
+      }).execute()
+
+      if(result.affected === 0){
+        const current = await manager.findOneBy(DocumentRequest, {id})
+        if(!current){
+          throw new NotFoundException('Request does not exist.')
+        }
+        if(current.version !== updateRequestDto.version){
+          throw new ConflictException('The request was changed by someone else. Reload it and try again')
+        }
+        throw new BadRequestException('Request can only be reviewed if it is currently in Reviewing status.')
+
+      }
+      await manager.insert(DocumentRequestEvent, {
+        request: {id},
+        fromStatus: DocumentRequestStatus.Reviewing,
+        toStatus: updateRequestDto.status,
+        reason: updateRequestDto.rejectionReason! ?? null,
+        actorAccountant: actor
+
+      })
+
+      return await manager.findOneBy(DocumentRequest, {id})
+    })
   }
 }

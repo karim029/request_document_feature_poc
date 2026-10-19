@@ -8,6 +8,8 @@ import { Client } from './clients/entities/client.entity';
 import { DocumentRequest } from './requests/entities/document-request.entity';
 import { RequestsModule } from './requests/requests.module';
 import { AccountantsModule } from './accountants/accountants.module';
+import { DocumentRequestEvent } from './requests/entities/document-request-event.entity';
+import { BulkBatch } from './requests/entities/bulk-batch.entity';
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { AccountantsModule } from './accountants/accountants.module';
         username: configService.get('DB_USERNAME'),
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
-        entities: [Accountant, Client, DocumentRequest],
+        entities: [Accountant, Client, DocumentRequest, DocumentRequestEvent, BulkBatch],
         synchronize: false,
         timezone: 'Z',
       }),

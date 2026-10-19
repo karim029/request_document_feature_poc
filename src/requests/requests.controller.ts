@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Patch,
@@ -46,8 +48,13 @@ export class RequestsController {
   @Patch('review/:id')
   updateRequestStatus(
     @Param('id', ParseIntPipe) id: number,
+    @Headers('x-actor-id') rawActorId: string,
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
-    return this.requestsService.updateStatus(id, updateRequestDto);
+    const actorId = Number(rawActorId)
+    if(!Number.isInteger(actorId) || actorId <= 0){
+      throw new BadRequestException('The X-Actor-Id header must be a positive integer')
+    }
+    return this.requestsService.updateStatus(id,actorId ,updateRequestDto);
   }
 }
