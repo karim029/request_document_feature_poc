@@ -18,6 +18,7 @@ describe('RequestsService', () => {
     findOneBy: jest.Mock;
     save: jest.Mock;
     findOne: jest.Mock;
+    existsBy: jest.Mock;
   };
   let clientRepo: { findOneBy: jest.Mock; findOne: jest.Mock };
   let manager: {
@@ -34,12 +35,16 @@ describe('RequestsService', () => {
   };
   let dataSource: { transaction: jest.Mock };
 
+  let eventRepo: { find: jest.Mock };
+
   beforeEach(async () => {
+    eventRepo = { find: jest.fn() };
     requestRepo = {
       find: jest.fn(),
       findOneBy: jest.fn(),
       save: jest.fn(),
       findOne: jest.fn(),
+      existsBy: jest.fn(),
     };
     clientRepo = { findOneBy: jest.fn(), findOne: jest.fn() };
     qb = {
@@ -65,6 +70,10 @@ describe('RequestsService', () => {
         { provide: getRepositoryToken(DocumentRequest), useValue: requestRepo },
         { provide: getRepositoryToken(Client), useValue: clientRepo },
         { provide: DataSource, useValue: dataSource },
+        {
+          provide: getRepositoryToken(DocumentRequestEvent),
+          useValue: eventRepo,
+        },
       ],
     }).compile();
 
@@ -402,6 +411,80 @@ describe('RequestsService', () => {
       await expect(service.getRequest(3)).rejects.toThrow(
         'No request found with this id',
       );
+    });
+  });
+  describe('getHistory', () => {
+    it('returns 404 when the request does not exist', async () => {
+      requestRepo.existsBy.mockResolvedValue(false);
+      await expect(service.getHistory(9)).rejects.toThrow(
+        'Request does not exist',
+      );
+      expect(eventRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty list when the request has no events', async () => {
+      requestRepo.existsBy.mockResolvedValue(true);
+      eventRepo.find.mockResolvedValue([]);
+      await expect(service.getHistory(2)).resolves.toEqual([]);
+    });
+
+    it('reads the events in order, with both actor relations, in one query', async () => {
+      requestRepo.existsBy.mockResolvedValue(true);
+      eventRepo.find.mockResolvedValue([]);
+
+      await service.getHistory(2);
+
+      expect(eventRepo.find).toHaveBeenCalledTimes(1);
+      expect(eventRepo.find).toHaveBeenCalledWith({
+        where: { request: { id: 2 } },
+        relations: { actorAccountant: true, actorClient: true },
+        order: { createdAt: 'ASC', id: 'ASC' },
+      });
+    });
+
+    it('maps each event and tells accountant and client actors apart', async () => {
+      const first = new Date('2026-10-19T16:40:22.000Z');
+      const second = new Date('2026-10-19T17:56:38.000Z');
+      requestRepo.existsBy.mockResolvedValue(true);
+      eventRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          fromStatus: DocumentRequestStatus.Reviewing,
+          toStatus: DocumentRequestStatus.Rejected,
+          reason: 'blurry',
+          createdAt: first,
+          actorAccountant: { id: 1, email: 'a@test.com' },
+          actorClient: null,
+        },
+        {
+          id: 2,
+          fromStatus: DocumentRequestStatus.Rejected,
+          toStatus: DocumentRequestStatus.Reviewing,
+          reason: null,
+          createdAt: second,
+          actorAccountant: null,
+          actorClient: { id: 5, email: 'c@test.com' },
+        },
+      ]);
+
+      await expect(service.getHistory(2)).resolves.toEqual([
+        {
+          id: 1,
+          fromStatus: DocumentRequestStatus.Reviewing,
+          toStatus: DocumentRequestStatus.Rejected,
+          reason: 'blurry',
+          createdAt: first,
+          actor: { type: 'accountant', id: 1 },
+        },
+        {
+          id: 2,
+          fromStatus: DocumentRequestStatus.Rejected,
+          toStatus: DocumentRequestStatus.Reviewing,
+          reason: null,
+          createdAt: second,
+          actor: { type: 'client', id: 5 },
+        },
+      ]);
     });
   });
 

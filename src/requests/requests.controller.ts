@@ -54,4 +54,9 @@ export class RequestsController {
   ) {
     return this.requestsService.updateStatus(id, actorId, updateRequestDto);
   }
+
+  @Get(':id/history')
+  getRequestHistory(@Param('id', ParseIntPipe) requestId: number) {
+    return this.requestsService.getHistory(requestId);
+  }
 }

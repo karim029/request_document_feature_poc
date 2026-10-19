@@ -24,6 +24,8 @@ export class RequestsService {
     private requestRepository: Repository<DocumentRequest>,
     @InjectRepository(Client) private clientRepository: Repository<Client>,
     private readonly dataSource: DataSource,
+    @InjectRepository(DocumentRequestEvent)
+    private readonly requestEventRepository: Repository<DocumentRequestEvent>,
   ) {}
 
   async getAllRequests() {
@@ -227,5 +229,29 @@ export class RequestsService {
 
       return await manager.findOneBy(DocumentRequest, { id });
     });
+  }
+
+  async getHistory(requestId: number) {
+    const exists = await this.requestRepository.existsBy({
+      id: requestId,
+    });
+    if (!exists) {
+      throw new NotFoundException('Request does not exist');
+    }
+    const events = await this.requestEventRepository.find({
+      where: { request: { id: requestId } },
+      relations: { actorAccountant: true, actorClient: true },
+      order: { createdAt: 'ASC', id: 'ASC' },
+    });
+    return events.map((event) => ({
+      id: event.id,
+      fromStatus: event.fromStatus ?? null,
+      toStatus: event.toStatus,
+      reason: event.reason ?? null,
+      createdAt: event.createdAt,
+      actor: event.actorAccountant
+        ? { type: 'accountant' as const, id: event.actorAccountant.id }
+        : { type: 'client' as const, id: event.actorClient?.id },
+    }));
   }
 }
