@@ -6,10 +6,17 @@ import { DocumentRequest } from './entities/document-request.entity';
 import { Client } from 'src/clients/entities/client.entity';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { DocumentRequestEvent } from './entities/document-request-event.entity';
+import { BulkBatch } from './entities/bulk-batch.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DocumentRequest, Client]),
+    TypeOrmModule.forFeature([
+      DocumentRequest,
+      Client,
+      DocumentRequestEvent,
+      BulkBatch,
+    ]),
     MulterModule.register({
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter(req, file, callback) {

@@ -13,6 +13,7 @@ import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UpdateRequestDto } from './dto/update-request.dto';
+import { ActorId } from 'src/common/decorators/actor-id.decorator';
 type MulterFile = Express.Multer.File;
 
 @Controller('requests')
@@ -38,16 +39,19 @@ export class RequestsController {
   @UseInterceptors(FileInterceptor('file'))
   uploadRequestFile(
     @Param('id', ParseIntPipe) requestId: number,
+    @ActorId() actorId: number,
+    @Body('version', ParseIntPipe) version: number,
     @UploadedFile() file: MulterFile,
   ) {
-    return this.requestsService.saveDocument(requestId, file);
+    return this.requestsService.saveDocument(requestId, actorId, version, file);
   }
 
   @Patch('review/:id')
   updateRequestStatus(
     @Param('id', ParseIntPipe) id: number,
+    @ActorId() actorId: number,
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
-    return this.requestsService.updateStatus(id, updateRequestDto);
+    return this.requestsService.updateStatus(id, actorId, updateRequestDto);
   }
 }
