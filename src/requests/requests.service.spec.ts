@@ -8,10 +8,21 @@ import { DocumentRequest } from './entities/document-request.entity';
 import { DocumentRequestEvent } from './entities/document-request-event.entity';
 import { DocumentRequestStatus } from './entities/document-request-status.enum';
 import { sha256File } from '../common/utils/sha256-file';
-
+import { InboxSort } from './dto/inbox-query.dto';
+import { encodeCursor, decodeCursor } from './inbox-cursor';
 jest.mock('../common/utils/sha256-file');
 
 describe('RequestsService', () => {
+  let inboxQb: {
+    innerJoin: jest.Mock;
+    select: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    orderBy: jest.Mock;
+    addOrderBy: jest.Mock;
+    limit: jest.Mock;
+    getMany: jest.Mock;
+  };
   let service: RequestsService;
   let requestRepo: {
     find: jest.Mock;
@@ -19,6 +30,7 @@ describe('RequestsService', () => {
     save: jest.Mock;
     findOne: jest.Mock;
     existsBy: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
   let clientRepo: { findOneBy: jest.Mock; findOne: jest.Mock };
   let manager: {
@@ -45,6 +57,7 @@ describe('RequestsService', () => {
       save: jest.fn(),
       findOne: jest.fn(),
       existsBy: jest.fn(),
+      createQueryBuilder: jest.fn(),
     };
     clientRepo = { findOneBy: jest.fn(), findOne: jest.fn() };
     qb = {
@@ -64,6 +77,18 @@ describe('RequestsService', () => {
         callback(manager),
       ),
     };
+    inboxQb = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
+
+    requestRepo.createQueryBuilder.mockReturnValue(inboxQb);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RequestsService,
@@ -485,6 +510,107 @@ describe('RequestsService', () => {
           actor: { type: 'client', id: 5 },
         },
       ]);
+    });
+  });
+
+  describe('getInbox', () => {
+    const base = { accountantId: 1, sort: InboxSort.CreatedDesc, limit: 2 };
+    const row = (id: number) => ({
+      id,
+      title: `t${id}`,
+      status: DocumentRequestStatus.Pending,
+      dueDate: null,
+      createdAt: new Date('2026-10-01'),
+      version: 0,
+      client: { id: 5, username: 'client 5', email: 'c@test.com' },
+    });
+
+    it('always filters by the accountant', async () => {
+      await service.getInbox(base);
+      expect(inboxQb.where).toHaveBeenCalledWith(
+        'r.accountantId = :accountantId',
+        { accountantId: 1 },
+      );
+    });
+
+    it('adds the optional filters only when they are sent', async () => {
+      await service.getInbox(base);
+      expect(inboxQb.andWhere).not.toHaveBeenCalled();
+
+      await service.getInbox({
+        ...base,
+        clientId: 5,
+        status: [
+          DocumentRequestStatus.Pending,
+          DocumentRequestStatus.Reviewing,
+        ],
+      });
+      expect(inboxQb.andWhere).toHaveBeenCalledWith('r.clientId = :clientId', {
+        clientId: 5,
+      });
+      expect(inboxQb.andWhere).toHaveBeenCalledWith(
+        'r.status IN (:...statuses)',
+        {
+          statuses: [
+            DocumentRequestStatus.Pending,
+            DocumentRequestStatus.Reviewing,
+          ],
+        },
+      );
+    });
+
+    it('sorts newest first by default, with the id as tie-breaker', async () => {
+      await service.getInbox(base);
+      expect(inboxQb.orderBy).toHaveBeenCalledWith('r.createdAt', 'DESC');
+      expect(inboxQb.addOrderBy).toHaveBeenCalledWith('r.id', 'DESC');
+    });
+
+    it('sorts by due date and leaves out requests without one', async () => {
+      await service.getInbox({ ...base, sort: InboxSort.DueAsc });
+      expect(inboxQb.andWhere).toHaveBeenCalledWith('r.dueDate IS NOT NULL');
+      expect(inboxQb.orderBy).toHaveBeenCalledWith('r.dueDate', 'ASC');
+      expect(inboxQb.addOrderBy).toHaveBeenCalledWith('r.id', 'ASC');
+    });
+
+    it('asks for one extra row to know if there is a next page', async () => {
+      await service.getInbox(base);
+      expect(inboxQb.limit).toHaveBeenCalledWith(3);
+    });
+
+    it('returns a cursor for the last item when there is a next page', async () => {
+      inboxQb.getMany.mockResolvedValue([row(9), row(8), row(7)]);
+      const result = await service.getInbox(base);
+      expect(result.items).toHaveLength(2);
+      expect(decodeCursor(result.nextCursor as string)).toEqual({
+        sort: InboxSort.CreatedDesc,
+        id: 8,
+      });
+    });
+
+    it('returns no cursor on the last page', async () => {
+      inboxQb.getMany.mockResolvedValue([row(2), row(1)]);
+      const result = await service.getInbox(base);
+      expect(result.items).toHaveLength(2);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it('returns only the chosen client fields, no email', async () => {
+      inboxQb.getMany.mockResolvedValue([row(1)]);
+      const result = await service.getInbox(base);
+      expect(result.items[0].client).toEqual({ id: 5, username: 'client 5' });
+    });
+
+    it('rejects a cursor that cannot be decoded', async () => {
+      await expect(
+        service.getInbox({ ...base, cursor: 'garbage' }),
+      ).rejects.toThrow('Invalid cursor');
+    });
+
+    it('rejects a cursor made for a different sort', async () => {
+      const cursor = encodeCursor({ sort: InboxSort.DueAsc, id: 4 });
+      await expect(service.getInbox({ ...base, cursor })).rejects.toThrow(
+        'does not match the sort',
+      );
     });
   });
 
