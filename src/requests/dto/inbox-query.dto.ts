@@ -1,6 +1,13 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, Min,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
 } from 'class-validator';
 import { DocumentRequestStatus } from '../entities/document-request-status.enum';
 
@@ -22,8 +29,8 @@ export class InboxQueryDto {
   clientId?: number;
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) =>
-    Array.isArray(value) ? value : [value],
+  @Transform(({ value }: { value: unknown }): unknown[] =>
+    Array.isArray(value) ? (value as unknown[]) : [value],
   )
   @IsEnum(DocumentRequestStatus, { each: true })
   status?: DocumentRequestStatus[];

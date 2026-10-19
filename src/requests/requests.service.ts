@@ -16,6 +16,8 @@ import { Accountant } from 'src/accountants/entities/accountant.entity';
 import { DocumentRequestEvent } from './entities/document-request-event.entity';
 import { sha256File } from 'src/common/utils/sha256-file';
 import { unlink } from 'fs/promises';
+import { InboxQueryDto, InboxSort } from './dto/inbox-query.dto';
+import { decodeCursor, encodeCursor } from './inbox-cursor';
 
 @Injectable()
 export class RequestsService {
@@ -28,8 +30,84 @@ export class RequestsService {
     private readonly requestEventRepository: Repository<DocumentRequestEvent>,
   ) {}
 
-  async getAllRequests() {
-    return await this.requestRepository.find();
+  async getInbox(query: InboxQueryDto) {
+    const qb = this.requestRepository
+      .createQueryBuilder('r')
+      .innerJoin('r.client', 'c')
+      .select([
+        'r.id',
+        'r.title',
+        'r.status',
+        'r.dueDate',
+        'r.createdAt',
+        'r.version',
+        'c.id',
+        'c.username',
+      ])
+      .where('r.accountantId = :accountantId', {
+        accountantId: query.accountantId,
+      });
+
+    if (query.clientId) {
+      qb.andWhere('r.clientId = :clientId', { clientId: query.clientId });
+    }
+    if (query.status?.length) {
+      qb.andWhere('r.status IN (:...statuses)', { statuses: query.status });
+    }
+    if (query.createdFrom) {
+      qb.andWhere('r.createdAt >= :createdFrom', {
+        createdFrom: query.createdFrom,
+      });
+    }
+    if (query.createdTo) {
+      qb.andWhere('r.createdAt <= :createdTo', { createdTo: query.createdTo });
+    }
+    if (query.overdue) {
+      qb.andWhere('r.status IN (:...open)', {
+        open: [DocumentRequestStatus.Pending, DocumentRequestStatus.Reviewing],
+      }).andWhere('r.dueDate < CURDATE()');
+    }
+    if (query.sort === InboxSort.DueAsc) {
+      qb.andWhere('r.dueDate IS NOT NULL')
+        .orderBy('r.dueDate', 'ASC')
+        .addOrderBy('r.id', 'ASC');
+    } else {
+      qb.orderBy('r.createdAt', 'DESC').addOrderBy('r.id', 'DESC');
+    }
+    if (query.cursor) {
+      const cursor = decodeCursor(query.cursor);
+      if (cursor.sort !== String(query.sort)) {
+        throw new BadRequestException('The cursor does not match the sort');
+      }
+      const column = query.sort === InboxSort.DueAsc ? 'dueDate' : 'createdAt';
+      const operator = query.sort === InboxSort.DueAsc ? '>' : '<';
+      const bookmark = `(SELECT b.${column} FROM document_request b WHERE b.id = :cid)`;
+      qb.andWhere(
+        `(r.${column} ${operator} ${bookmark} OR (r.${column} = ${bookmark} AND r.id ${operator} :cid))`,
+        { cid: cursor.id },
+      );
+    }
+
+    const rows = await qb.limit(query.limit + 1).getMany();
+    const hasNext = rows.length > query.limit;
+    const page = hasNext ? rows.slice(0, query.limit) : rows;
+    const last = page[page.length - 1];
+
+    return {
+      items: page.map((r) => ({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        dueDate: r.dueDate,
+        createdAt: r.createdAt,
+        version: r.version,
+        client: { id: r.client.id, username: r.client.username },
+      })),
+      nextCursor:
+        hasNext && last
+          ? encodeCursor({ sort: query.sort, id: last.id })
+          : null,
+    };
   }
 
   async getRequest(id: number) {

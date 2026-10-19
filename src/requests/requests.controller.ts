@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { CreateRequestDto } from './dto/create-request.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { ActorId } from 'src/common/decorators/actor-id.decorator';
+import { InboxQueryDto } from './dto/inbox-query.dto';
 type MulterFile = Express.Multer.File;
 
 @Controller('requests')
@@ -21,8 +23,8 @@ export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
   @Get()
-  getAllRequests() {
-    return this.requestsService.getAllRequests();
+  getInbox(@Query() query: InboxQueryDto) {
+    return this.requestsService.getInbox(query);
   }
 
   @Get(':id')
