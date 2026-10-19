@@ -26,7 +26,10 @@ import { BulkBatch } from './requests/entities/bulk-batch.entity';
         username: configService.get('DB_USERNAME'),
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
-        logging: configService.get('DB_LOGGING') === 'true' ? ['query','error']: ['error'],
+        logging:
+          configService.get('DB_LOGGING') === 'true'
+            ? ['query', 'error']
+            : ['error'],
         maxQueryExecutionTime: 100,
         entities: [
           Accountant,

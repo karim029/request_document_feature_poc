@@ -53,10 +53,10 @@ export class RequestsController {
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
     return this.requestsService.updateStatus(id, actorId, updateRequestDto);
-  }  
+  }
 
   @Get(':id/history')
-  getRequestHistory(@Param('id',ParseIntPipe) requestId: number){
-    return this.requestsService.getHistory(requestId)
+  getRequestHistory(@Param('id', ParseIntPipe) requestId: number) {
+    return this.requestsService.getHistory(requestId);
   }
 }
