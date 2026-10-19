@@ -53,5 +53,5 @@ export class RequestsController {
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
     return this.requestsService.updateStatus(id, actorId, updateRequestDto);
-  }
+  }  
 }
