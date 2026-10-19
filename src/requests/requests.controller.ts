@@ -1,9 +1,7 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
-  Headers,
   Param,
   ParseIntPipe,
   Patch,
@@ -15,6 +13,7 @@ import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UpdateRequestDto } from './dto/update-request.dto';
+import { ActorId } from 'src/common/decorators/actor-id.decorator';
 type MulterFile = Express.Multer.File;
 
 @Controller('requests')
@@ -40,21 +39,19 @@ export class RequestsController {
   @UseInterceptors(FileInterceptor('file'))
   uploadRequestFile(
     @Param('id', ParseIntPipe) requestId: number,
+    @ActorId() actorId: number,
+    @Body('version',ParseIntPipe) version: number,
     @UploadedFile() file: MulterFile,
   ) {
-    return this.requestsService.saveDocument(requestId, file);
+    return this.requestsService.saveDocument(requestId,actorId,version, file);
   }
 
   @Patch('review/:id')
   updateRequestStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Headers('x-actor-id') rawActorId: string,
+    @ActorId() actorId: number,
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
-    const actorId = Number(rawActorId)
-    if(!Number.isInteger(actorId) || actorId <= 0){
-      throw new BadRequestException('The X-Actor-Id header must be a positive integer')
-    }
     return this.requestsService.updateStatus(id,actorId ,updateRequestDto);
   }
 }
