@@ -11,7 +11,12 @@ import { BulkBatch } from './entities/bulk-batch.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DocumentRequest, Client, DocumentRequestEvent, BulkBatch]),
+    TypeOrmModule.forFeature([
+      DocumentRequest,
+      Client,
+      DocumentRequestEvent,
+      BulkBatch,
+    ]),
     MulterModule.register({
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter(req, file, callback) {

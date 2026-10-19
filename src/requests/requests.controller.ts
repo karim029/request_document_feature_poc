@@ -40,10 +40,10 @@ export class RequestsController {
   uploadRequestFile(
     @Param('id', ParseIntPipe) requestId: number,
     @ActorId() actorId: number,
-    @Body('version',ParseIntPipe) version: number,
+    @Body('version', ParseIntPipe) version: number,
     @UploadedFile() file: MulterFile,
   ) {
-    return this.requestsService.saveDocument(requestId,actorId,version, file);
+    return this.requestsService.saveDocument(requestId, actorId, version, file);
   }
 
   @Patch('review/:id')
@@ -52,6 +52,6 @@ export class RequestsController {
     @ActorId() actorId: number,
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
-    return this.requestsService.updateStatus(id,actorId ,updateRequestDto);
+    return this.requestsService.updateStatus(id, actorId, updateRequestDto);
   }
 }

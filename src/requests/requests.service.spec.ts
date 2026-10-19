@@ -7,6 +7,9 @@ import { Client } from 'src/clients/entities/client.entity';
 import { DocumentRequest } from './entities/document-request.entity';
 import { DocumentRequestEvent } from './entities/document-request-event.entity';
 import { DocumentRequestStatus } from './entities/document-request-status.enum';
+import { sha256File } from '../common/utils/sha256-file';
+
+jest.mock('../common/utils/sha256-file');
 
 describe('RequestsService', () => {
   let service: RequestsService;
@@ -19,6 +22,7 @@ describe('RequestsService', () => {
   let clientRepo: { findOneBy: jest.Mock; findOne: jest.Mock };
   let manager: {
     findOneBy: jest.Mock;
+    findOne: jest.Mock;
     insert: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
@@ -46,6 +50,7 @@ describe('RequestsService', () => {
     };
     manager = {
       findOneBy: jest.fn(),
+      findOne: jest.fn(),
       insert: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     };
@@ -178,7 +183,9 @@ describe('RequestsService', () => {
     });
 
     it('returns 404 when the request does not exist', async () => {
-      manager.findOneBy.mockResolvedValueOnce(actor).mockResolvedValueOnce(null);
+      manager.findOneBy
+        .mockResolvedValueOnce(actor)
+        .mockResolvedValueOnce(null);
       qb.execute.mockResolvedValue({ affected: 0 });
 
       await expect(service.updateStatus(2, 1, approve)).rejects.toThrow(
@@ -188,13 +195,11 @@ describe('RequestsService', () => {
     });
 
     it('returns 409 when someone changed the request (the version differs)', async () => {
-      manager.findOneBy
-        .mockResolvedValueOnce(actor)
-        .mockResolvedValueOnce({
-          id: 2,
-          version: 1,
-          status: DocumentRequestStatus.Approved,
-        });
+      manager.findOneBy.mockResolvedValueOnce(actor).mockResolvedValueOnce({
+        id: 2,
+        version: 1,
+        status: DocumentRequestStatus.Approved,
+      });
       qb.execute.mockResolvedValue({ affected: 0 });
 
       await expect(service.updateStatus(2, 1, approve)).rejects.toThrow(
@@ -204,13 +209,11 @@ describe('RequestsService', () => {
     });
 
     it('returns 400 when the version matches but the request is not reviewing', async () => {
-      manager.findOneBy
-        .mockResolvedValueOnce(actor)
-        .mockResolvedValueOnce({
-          id: 2,
-          version: 0,
-          status: DocumentRequestStatus.Pending,
-        });
+      manager.findOneBy.mockResolvedValueOnce(actor).mockResolvedValueOnce({
+        id: 2,
+        version: 0,
+        status: DocumentRequestStatus.Pending,
+      });
       qb.execute.mockResolvedValue({ affected: 0 });
 
       await expect(service.updateStatus(2, 1, approve)).rejects.toThrow(
@@ -221,59 +224,175 @@ describe('RequestsService', () => {
   });
 
   describe('saveDocument', () => {
-    const fakeFile = { path: 'uploads/test.pdf' } as Express.Multer.File;
+    const file = {
+      originalname: 'passport.pdf',
+      filename: '1792-passport.pdf',
+      path: 'uploads/1792-passport.pdf',
+      mimetype: 'application/pdf',
+      size: 1234,
+    } as Express.Multer.File;
+    const client = { id: 5 };
+    const rejectedRequest = {
+      id: 2,
+      status: DocumentRequestStatus.Rejected,
+      version: 3,
+      client,
+    };
 
-    it('throws when no file is provided, before touching the database', async () => {
+    beforeEach(() => {
+      jest.mocked(sha256File).mockResolvedValue('checksum123');
+    });
+
+    it('throws when no file is provided, before reading it or opening a transaction', async () => {
       await expect(
-        service.saveDocument(1, undefined as unknown as Express.Multer.File),
+        service.saveDocument(
+          2,
+          5,
+          3,
+          undefined as unknown as Express.Multer.File,
+        ),
       ).rejects.toThrow('No file uploaded or file rejected');
-      expect(requestRepo.findOneBy).not.toHaveBeenCalled();
-      expect(requestRepo.save).not.toHaveBeenCalled();
+      expect(sha256File).not.toHaveBeenCalled();
+      expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
-    it('throws when the request does not exist', async () => {
-      requestRepo.findOneBy.mockResolvedValue(null);
-      await expect(service.saveDocument(1, fakeFile)).rejects.toThrow(
-        'Request does not exist.',
+    it('stops when the actor is not a client', async () => {
+      manager.findOneBy.mockResolvedValue(null);
+      await expect(service.saveDocument(2, 99, 3, file)).rejects.toThrow(
+        'Only a client',
       );
-      expect(requestRepo.save).not.toHaveBeenCalled();
+      expect(qb.execute).not.toHaveBeenCalled();
     });
 
-    it('throws when the request is already approved', async () => {
-      requestRepo.findOneBy.mockResolvedValue({
-        id: 1,
+    it('returns 404 when the request does not exist', async () => {
+      manager.findOneBy.mockResolvedValue(client);
+      manager.findOne.mockResolvedValue(null);
+      await expect(service.saveDocument(2, 5, 3, file)).rejects.toThrow(
+        'not found',
+      );
+      expect(qb.execute).not.toHaveBeenCalled();
+    });
+
+    it('stops when the actor is not the client of this request', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 9 });
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      await expect(service.saveDocument(2, 9, 3, file)).rejects.toThrow(
+        'client of this request',
+      );
+      expect(qb.execute).not.toHaveBeenCalled();
+    });
+
+    it('refuses an upload to an approved request', async () => {
+      manager.findOneBy.mockResolvedValue(client);
+      manager.findOne.mockResolvedValue({
+        ...rejectedRequest,
         status: DocumentRequestStatus.Approved,
       });
-      await expect(service.saveDocument(1, fakeFile)).rejects.toThrow(
-        'Cannot upload file to an already approved request.',
+      await expect(service.saveDocument(2, 5, 3, file)).rejects.toThrow(
+        'approved',
       );
-      expect(requestRepo.save).not.toHaveBeenCalled();
+      expect(qb.execute).not.toHaveBeenCalled();
     });
 
-    it('stores the file path and moves a pending request to Reviewing', async () => {
-      requestRepo.findOneBy.mockResolvedValue({
-        id: 1,
-        status: DocumentRequestStatus.Pending,
-      });
-      await service.saveDocument(1, fakeFile);
-      expect(requestRepo.save).toHaveBeenCalledWith(
+    it('uploads, resets the decision fields and inserts one event', async () => {
+      const updated = {
+        id: 2,
+        status: DocumentRequestStatus.Reviewing,
+        version: 4,
+      };
+      manager.findOneBy
+        .mockResolvedValueOnce(client)
+        .mockResolvedValueOnce(updated);
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      qb.execute.mockResolvedValue({ affected: 1 });
+
+      const result = await service.saveDocument(2, 5, 3, file);
+
+      expect(qb.set).toHaveBeenCalledWith(
         expect.objectContaining({
-          storageKey: 'uploads/test.pdf',
           status: DocumentRequestStatus.Reviewing,
+          rejectionReason: null,
+          reviewedAt: null,
+          storageKey: '1792-passport.pdf',
+          originalName: 'passport.pdf',
+          mimeType: 'application/pdf',
+          fileSize: 1234,
+          checksum: 'checksum123',
         }),
       );
+      expect(manager.insert).toHaveBeenCalledTimes(1);
+      expect(manager.insert).toHaveBeenCalledWith(
+        DocumentRequestEvent,
+        expect.objectContaining({
+          request: { id: 2 },
+          fromStatus: DocumentRequestStatus.Rejected,
+          toStatus: DocumentRequestStatus.Reviewing,
+          actorClient: { id: 5 },
+        }),
+      );
+      expect(result).toBe(updated);
     });
 
-    it('currently allows resubmitting a rejected request (moves it back to Reviewing)', async () => {
-      requestRepo.findOneBy.mockResolvedValue({
-        id: 1,
-        status: DocumentRequestStatus.Rejected,
-        rejectionReason: 'old reason',
-      });
-      await service.saveDocument(1, fakeFile);
-      expect(requestRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ status: DocumentRequestStatus.Reviewing }),
+    it('stores the file name, never the full path', async () => {
+      manager.findOneBy
+        .mockResolvedValueOnce(client)
+        .mockResolvedValueOnce({ id: 2 });
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      qb.execute.mockResolvedValue({ affected: 1 });
+
+      await service.saveDocument(2, 5, 3, file);
+
+      expect(qb.set).not.toHaveBeenCalledWith(
+        expect.objectContaining({ storageKey: file.path }),
       );
+    });
+
+    it('passes the id, the version and only the allowed statuses to the database guard', async () => {
+      manager.findOneBy
+        .mockResolvedValueOnce(client)
+        .mockResolvedValueOnce({ id: 2 });
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      qb.execute.mockResolvedValue({ affected: 1 });
+
+      await service.saveDocument(2, 5, 3, file);
+
+      expect(qb.where).toHaveBeenCalledWith(expect.any(String), {
+        id: 2,
+        version: 3,
+        statuses: [
+          DocumentRequestStatus.Pending,
+          DocumentRequestStatus.Rejected,
+          DocumentRequestStatus.Reviewing,
+        ],
+      });
+    });
+
+    it('returns 409 when the version changed meanwhile', async () => {
+      manager.findOneBy
+        .mockResolvedValueOnce(client)
+        .mockResolvedValueOnce({ id: 2, version: 4 });
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      qb.execute.mockResolvedValue({ affected: 0 });
+
+      await expect(service.saveDocument(2, 5, 3, file)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(manager.insert).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when the version matches but the status no longer allows an upload', async () => {
+      manager.findOneBy.mockResolvedValueOnce(client).mockResolvedValueOnce({
+        id: 2,
+        version: 3,
+        status: DocumentRequestStatus.Approved,
+      });
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      qb.execute.mockResolvedValue({ affected: 0 });
+
+      await expect(service.saveDocument(2, 5, 3, file)).rejects.toThrow(
+        'pending, reviewing or rejected',
+      );
+      expect(manager.insert).not.toHaveBeenCalled();
     });
   });
 

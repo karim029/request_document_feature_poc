@@ -1,4 +1,11 @@
-import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { DocumentRequestStatus } from '../entities/document-request-status.enum';
 
 export class UpdateRequestDto {
@@ -13,5 +20,5 @@ export class UpdateRequestDto {
   @IsNotEmpty()
   @IsInt()
   @Min(0)
-  version!: number 
+  version!: number;
 }
