@@ -27,7 +27,8 @@ const rowPlaceholders = (rows: number, columns: number): string => {
 };
 
 // Each client belongs to one accountant, spread evenly (100 clients each).
-const ownerOf = (clientId: number): number => ((clientId - 1) % ACCOUNTANTS) + 1;
+const ownerOf = (clientId: number): number =>
+  ((clientId - 1) % ACCOUNTANTS) + 1;
 
 // Distribution of requests per client: a few heavy clients, some big ones,
 // and the rest with a few dozen. The total is exactly REQUESTS.
@@ -101,14 +102,33 @@ async function insertRows(
 }
 
 const REQUEST_COLUMNS = [
-  'id', 'title', 'description', 'status', 'rejectionReason', 'createdAt',
-  'updatedAt', 'dueDate', 'reviewedAt', 'storageKey', 'originalName',
-  'mimeType', 'fileSize', 'checksum', 'version', 'clientId', 'accountantId',
+  'id',
+  'title',
+  'description',
+  'status',
+  'rejectionReason',
+  'createdAt',
+  'updatedAt',
+  'dueDate',
+  'reviewedAt',
+  'storageKey',
+  'originalName',
+  'mimeType',
+  'fileSize',
+  'checksum',
+  'version',
+  'clientId',
+  'accountantId',
   'reviewerId',
 ];
 const EVENT_COLUMNS = [
-  'requestId', 'fromStatus', 'toStatus', 'reason', 'actorAccountantId',
-  'actorClientId', 'createdAt',
+  'requestId',
+  'fromStatus',
+  'toStatus',
+  'reason',
+  'actorAccountantId',
+  'actorClientId',
+  'createdAt',
 ];
 
 function buildBatch(
@@ -129,7 +149,8 @@ function buildBatch(
     const hasFile = status !== 'pending';
     const isDecided = status === 'approved' || status === 'rejected';
     const version = status === 'pending' ? 0 : status === 'reviewing' ? 1 : 2;
-    const dueDate = i % 10 < 7 ? sqlDay(created + (7 + ((i * 13) % 54)) * DAY) : null;
+    const dueDate =
+      i % 10 < 7 ? sqlDay(created + (7 + ((i * 13) % 54)) * DAY) : null;
     const updated = isDecided ? decided : hasFile ? uploaded : created;
 
     requests.push([
@@ -156,13 +177,25 @@ function buildBatch(
     // History: created by the accountant, uploaded by the client, decided by the accountant.
     events.push([id, null, 'pending', null, owner, null, sqlDateTime(created)]);
     if (hasFile) {
-      events.push([id, 'pending', 'reviewing', null, null, clientId, sqlDateTime(uploaded)]);
+      events.push([
+        id,
+        'pending',
+        'reviewing',
+        null,
+        null,
+        clientId,
+        sqlDateTime(uploaded),
+      ]);
     }
     if (isDecided) {
       events.push([
-        id, 'reviewing', status,
+        id,
+        'reviewing',
+        status,
         status === 'rejected' ? 'Seeded rejection' : null,
-        owner, null, sqlDateTime(decided),
+        owner,
+        null,
+        sqlDateTime(decided),
       ]);
     }
   }
@@ -172,14 +205,19 @@ function buildBatch(
 async function truncateAll(qr: QueryRunner): Promise<void> {
   await qr.query('SET FOREIGN_KEY_CHECKS = 0');
   for (const table of [
-    'document_request_event', 'bulk_batch', 'document_request', 'client', 'accountant',
+    'document_request_event',
+    'bulk_batch',
+    'document_request',
+    'client',
+    'accountant',
   ]) {
     await qr.query(`TRUNCATE TABLE \`${table}\``);
   }
   await qr.query('SET FOREIGN_KEY_CHECKS = 1');
 }
 
-const seconds = (since: number): string => ((Date.now() - since) / 1000).toFixed(1);
+const seconds = (since: number): string =>
+  ((Date.now() - since) / 1000).toFixed(1);
 
 async function main(): Promise<void> {
   const reset = process.argv.includes('--reset');
@@ -195,11 +233,15 @@ async function main(): Promise<void> {
     const existing = Number(n);
 
     if (existing >= REQUESTS && !reset) {
-      console.log(`Already seeded (${existing} requests). Use --reset to rebuild.`);
+      console.log(
+        `Already seeded (${existing} requests). Use --reset to rebuild.`,
+      );
       return;
     }
     if (existing > 0 && !reset) {
-      console.log(`The table has ${existing} requests, not the large dataset. Run with --reset to wipe and reseed.`);
+      console.log(
+        `The table has ${existing} requests, not the large dataset. Run with --reset to wipe and reseed.`,
+      );
       process.exitCode = 1;
       return;
     }
@@ -214,17 +256,31 @@ async function main(): Promise<void> {
 
     let phase = Date.now();
     await insertRows(
-      qr, 'accountant', ['id', 'username', 'email'],
+      qr,
+      'accountant',
+      ['id', 'username', 'email'],
       Array.from({ length: ACCOUNTANTS }, (_, k) => [
-        k + 1, `seed-accountant-${k + 1}`, `seed-accountant-${k + 1}@test.com`,
+        k + 1,
+        `seed-accountant-${k + 1}`,
+        `seed-accountant-${k + 1}@test.com`,
       ]),
     );
     for (let from = 0; from < CLIENTS; from += BATCH) {
       const rows: unknown[][] = [];
       for (let c = from + 1; c <= Math.min(from + BATCH, CLIENTS); c++) {
-        rows.push([c, `seed-client-${c}`, `seed-client-${c}@test.com`, ownerOf(c)]);
+        rows.push([
+          c,
+          `seed-client-${c}`,
+          `seed-client-${c}@test.com`,
+          ownerOf(c),
+        ]);
       }
-      await insertRows(qr, 'client', ['id', 'username', 'email', 'accountantId'], rows);
+      await insertRows(
+        qr,
+        'client',
+        ['id', 'username', 'email', 'accountantId'],
+        rows,
+      );
     }
     console.log(`Accountants and clients inserted in ${seconds(phase)}s`);
 
@@ -245,7 +301,9 @@ async function main(): Promise<void> {
       }
       eventCount += events.length;
       if (to % 50_000 === 0) {
-        console.log(`  ${to} requests, ${eventCount} events (${seconds(phase)}s)`);
+        console.log(
+          `  ${to} requests, ${eventCount} events (${seconds(phase)}s)`,
+        );
       }
     }
     await qr.query('SET UNIQUE_CHECKS = 1');
