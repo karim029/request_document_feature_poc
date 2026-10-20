@@ -12,6 +12,7 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/data-source.ts",
     "migration:generate": "npm run typeorm -- migration:generate -d src/data-source.ts",
     "migration:create": "npm run typeorm -- migration:create",
+    "seed:large": "ts-node -r tsconfig-paths/register src/seed-large.ts",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
