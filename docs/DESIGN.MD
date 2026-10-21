@@ -8,6 +8,7 @@ The design focuses on four things:
 - indexes chosen for the most used queries
 - measured performance
 - trade-offs, written down together with what each choice gives up
+
 ## 2. ERD
  
 ```mermaid
@@ -80,7 +81,7 @@ The relations are required in the database, not only in the code: `document_requ
  
 | Column | Table | Why |
 | --- | --- | --- |
-| `accountantId` | `document_request` | Copied from the client so the inbox filter and the index `(accountantId, status, createdAt)` need no join. Trade-off: the same fact is stored twice. Rule: it is the owner at creation time, and clients do not change accountant. |
+| `accountantId` | `document_request` | Copied from the client so the inbox filter and the inbox indexes (section 5) need no join. Trade-off: the same fact is stored twice. Rule: it is the owner at creation time, and clients do not change accountant. |
 | `dueDate` | `document_request` | Needed for the overdue filter and the dashboard. |
 | `reviewerId` | `document_request` | Who made the current decision. Empty until a decision. |
 | `reviewedAt` | `document_request` | When the approve or reject decision was made. |
@@ -101,19 +102,22 @@ The weakness is that this is identification, not authentication: anyone can clai
 I would use JWT bearer tokens in production. A guard verifies the signature and expiry, rejects a missing or invalid token with 401, and rejects a valid user with the wrong role with 403.
  
 ## 5. Indexes
- 
-Each index is derived from a real query. The write cost column says which operations touch it.
- 
+
+Each index is derived from a real query, and was checked at 1,000,000 rows with `EXPLAIN`, `ANALYZE` and a load test (`docs/PERFORMANCE.md`). The write cost column says which operations touch it. In InnoDB every secondary index entry also stores the primary key, so `id` at the end of an index makes the tie-breaker explicit and costs nothing extra.
+
 | Query | Index | Why this order | Write cost |
 | --- | --- | --- | --- |
-| Inbox, newest first: `WHERE accountantId = ? AND status IN (...) ORDER BY createdAt DESC, id DESC` | `IDX_request_inbox_created` `(accountantId, status, createdAt)` on `document_request` | The equality columns open the accountant and status folders, and `createdAt` last gives the order inside them, so no sort is needed when one status is selected. It also serves the dashboard counts through its leftmost prefix, and the foreign key on `accountantId`. | Every insert adds one entry. A status change moves the entry. `createdAt` never changes. |
-| Inbox, by due date: `WHERE accountantId = ? AND status = ? ORDER BY dueDate ASC`, and the overdue filter | `IDX_request_inbox_due` `(accountantId, status, dueDate)` on `document_request` | Same folders, with `dueDate` last as the order, and as the range for the overdue filter. | Every insert adds one entry. It moves when `status` or `dueDate` changes. |
+| Inbox, newest first, with no status filter or several statuses: `WHERE accountantId = ? ORDER BY createdAt DESC, id DESC`. Also the keyset cursor and the overdue filter. | `IDX_request_inbox_created` `(accountantId, createdAt, id)` on `document_request` | The equality column opens the accountant's folder, and the index stores that accountant's requests already in the order of the `ORDER BY`, so the newest rows are read from the end and nothing is sorted. Status and due date filters are checked on the rows read. It also serves the foreign key on `accountantId`. | One entry per insert. The indexed columns never change, so a status change does not touch it. |
+| Inbox, one status: `WHERE accountantId = ? AND status = ? ORDER BY createdAt DESC, id DESC` | `IDX_request_inbox_status_created` `(accountantId, status, createdAt, id)` on `document_request` | Two equality columns open the accountant and status folders, and `createdAt` gives the order inside, so exactly the 21 rows needed are read. Without it, a status filter reads rows in date order and fetches each one to check its status. Through its leftmost prefix it also serves the dashboard counts per status. | One entry per insert. It moves whenever `status` changes, so every review and upload touches it. |
+| Inbox sorted by due date: `WHERE accountantId = ? AND dueDate IS NOT NULL ORDER BY dueDate ASC, id ASC` | `IDX_request_inbox_due` `(accountantId, dueDate, id)` on `document_request` | The same rule for the other sort: the order is in the index, so there is no sort over thousands of entries. `IS NOT NULL` becomes an index range that skips requests without a due date. | One entry per insert. It moves only when `dueDate` changes. |
 | History: `WHERE requestId = ? ORDER BY createdAt, id` | `IDX_event_request_history` `(requestId, createdAt, id)` on `document_request_event` | `requestId` is the only equality, so it opens the folder. `createdAt` then `id` give the order, with `id` as the tie-breaker for equal timestamps. It also serves the foreign key on `requestId`. | Events are only inserted, never updated or deleted, so one entry per insert. |
 | Idempotency: `WHERE idempotencyKey = ?` | `UQ_bulk_batch_key` (unique) on `bulk_batch` | A unique index makes the duplicate check atomic: two retries at once cannot both insert. | One entry per batch. |
 | Foreign key on the reviewer | `IDX_request_reviewer` `(reviewerId)` on `document_request` | MariaDB needs an index on every foreign key column. It is created explicitly so it is named and dropped by the migration. | `reviewerId` is set once, at the decision. |
- 
-When several statuses are selected at once, each status folder is sorted on its own, so the database has to merge them and may sort that accountant's matching rows (a few thousand). This is measured in `PERFORMANCE.md`.
- 
+
+**The rule behind the three inbox indexes.** An index serves a query when its columns are in the order of the query: first the columns filtered by equality, then the columns in the `ORDER BY`. A column in the middle that the query does not filter on breaks the order, and the database has to gather and sort rows instead of reading the newest ones.
+
+**Revision after measurement.** The first design used `(accountantId, status, createdAt)` and `(accountantId, status, dueDate)`. These give date order only when one status is selected. At 1,000,000 requests the default view and the due date sort have no status filter, so the database had to gather and sort the accountant's rows (8,790 rows sorted to return 21, and the sort was 96% of the query's time). Under 20 concurrent users the optimizer also chose the index without `createdAt` for many accountants, which forced about 13,800 page reads per query instead of 91. I replaced both indexes with ones that hold the order columns, and added a separate index for a single status. Inbox p95 at 20 concurrent users went from 1.24 s to 31 ms for the default view, from 371 ms to 37 ms for a single status, and from 1.49 s to 40 ms for the due date sort. Several statuses (37 ms) and overdue (45 ms) are served by the first index without a merge or a sort: it reads in date order and checks each row (43 rows read to find 21 for two statuses). The trade-off is the write cost of three inbox indexes, measured in section 6 of `docs/PERFORMANCE.md`, and that a status filter on a very rare status would read many rows through the first index. Every status in this dataset is between 15% and 40%, so the status index covers that case directly.
+
 **Dashboard candidates, decided after measuring the naive version:** top clients `(accountantId, status, clientId)`, and turnaround, which reads the `document_request_event` table.
  
 ## 6. Concurrency design
@@ -124,6 +128,7 @@ Reviewing a request reads the row, checks the status in code, and then writes th
  
 - Two accountants approve and reject the same request at the same moment. Both pass the check, and the last write silently overwrites the first.
 - A reviewer opens a request, the client re-uploads a corrected file, and the reviewer approves a file they never saw. The status is still `reviewing`, so a status check does not notice.
+
 A stricter check in the code cannot fix this, because the gap between the check and the write still exists.
  
 ### Options considered
@@ -131,6 +136,7 @@ A stricter check in the code cannot fix this, because the gap between the check 
 1. **Conditional update.** Put the check in the write: `UPDATE ... WHERE id = ? AND status = 'reviewing'`. It is atomic, simple, and needs no extra column. Its downside is that it only protects the condition written in the `WHERE`, so it misses other changes, such as a re-upload while the status stays `reviewing`.
 2. **Row lock (pessimistic).** Read inside a transaction with `SELECT ... FOR UPDATE`, which blocks anyone else touching that one row until the transaction ends. It is always correct. Its downsides are that the lock is held for the whole transaction, it holds a database connection, it cannot span the time a person spends reading a document, and locking several rows in different orders can deadlock.
 3. **Version column (optimistic).** Each row carries a counter that increases on every write. The update only succeeds if the version still matches the one the client read. It takes no lock, and it detects any change to the row. Its costs are one extra column, the client must send back the version it saw, and every write path must bump it.
+
 ### Choice
  
 I chose the version column, for these reasons:
@@ -139,6 +145,7 @@ I chose the version column, for these reasons:
 - Collisions on a single request are rare, so optimistic locking costs almost nothing in the normal case, and fails safely with a 409 in the rare one.
 - It catches the re-upload case that a status-only check misses.
 - It does not replace history. The append-only `document_request_event` table records who changed what and when.
+
 For a short automated operation with no human in the middle, a conditional update would also be fine.
  
 ### How it works
@@ -148,6 +155,7 @@ Every response that returns a request includes its `version`. The review request
 1. Runs `UPDATE document_request SET status = ?, rejectionReason = ?, reviewerId = ?, reviewedAt = ?, version = version + 1 WHERE id = ? AND version = ? AND status = 'reviewing'`.
 2. If one row changed, inserts the matching `document_request_event` row (from status, to status, actor, reason).
 3. If zero rows changed, rolls back and returns `409 Conflict`, because someone changed the request first.
+
 The upload path follows the same pattern and also bumps `version`. If it did not, a re-upload would go undetected.
  
 ### How it is proven
@@ -162,18 +170,21 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 - **Options:** Offset (`LIMIT 20 OFFSET n`) makes the database count past every skipped row, so deep pages get slower, and rows inserted while a user is paging can shift the pages so a row repeats or is skipped. Keyset uses a bookmark (the last row seen) and the index jumps straight to it, so any page costs about the same.
 - **Choice:** keyset on `(createdAt, id)`. The `id` is the tie-breaker, so the bookmark points at exactly one row. The server fetches `limit + 1` rows to know whether a next page exists.
 - **What I give up:** jumping to page N and page numbers. The client only gets next and previous. Each sort order (created date, due date) needs its own index and its own cursor.
+
 ### Total count
  
 - **Question:** whether the inbox should return the total number of matching requests with each page.
 - **Options:** return a total on every page; never return one; or return it only when asked. A total means the database must find and count every matching row on each request, so the cost grows with the number of matches, and `limit + 1` cannot replace it because it only says whether a next page exists.
 - **Choice:** no total on the inbox. The response carries the next cursor, and the dashboard already gives counts per status when a number is needed.
 - **What I give up:** the UI cannot show "page 3 of 62" or "1,243 results" from the inbox itself.
+
 ### Denormalising accountantId
  
 - **Question:** should each request store its own `accountantId`, or find the accountant by going through the client?
 - **Options:** Without the copy, the inbox has to find the accountant's clients, collect their requests and sort the combined result, because an index can only sort one client's requests at a time. With the copy, one index finds all of an accountant's requests already sorted.
 - **Choice:** copy `accountantId` onto the request, so the inbox is a single index lookup with no join and no sort.
 - **What I give up:** the same fact is stored in two places and could disagree. If a client moved to another accountant, old requests would still show the old one. The rule that manages this: the value is set once, when the request is created, from the client's accountant, and it means the owner at creation time. Clients do not change accountant in this take-home.
+
 ### Dashboard: live aggregation vs rollup table
  
 - **Question:** how the accountant dashboard (`GET /accountants/:id/dashboard`) produces its numbers, and how stale they may be.
@@ -181,6 +192,7 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 - **Choice:** build the live version first and measure it against the target (p95 under 300 ms at 20 concurrent users on 1,000,000 rows). If it misses, add a short cache of about 30 seconds first, because it adds no cost to writes and cannot drift from the data. A rollup table only if the cache is not enough.
 - **Staleness:** live numbers are exact. Cached numbers can be up to 30 seconds old, which is acceptable because the dashboard is an overview, and the inbox is where exact data matters.
 - **What I give up:** with a cache, numbers up to 30 seconds old, and an in-memory cache is per application instance, so several instances would need a shared cache. A rollup would instead make every status change slower and add a risk of drift.
+
 ## 8. Migrations plan
  
 `synchronize` is turned off. Schema changes are made only through migrations, each with an `up` and a `down`, and database credentials come from `.env`. With `synchronize: true` nobody reviews a schema change, there is no history and no way back, and a column rename can be applied as drop-and-add, which loses the column's data.
@@ -193,14 +205,15 @@ An integration test against a real MariaDB sends 20 parallel approve and reject 
 | 3 | Make `accountantId` `NOT NULL`. Create the two inbox indexes and the `reviewerId` index. Then add the foreign keys on `accountantId` and `reviewerId`. | Drop the foreign keys, then the indexes, then make `accountantId` nullable again. |
 | 4 | Create `document_request_event` (foreign keys, a `CHECK` that exactly one actor column is set, and the history index) and `bulk_batch` (unique `idempotencyKey`). | Drop `bulk_batch`, then `document_request_event`. |
 | 5 | Drop `documentPath`. | Re-add `documentPath` and copy the values back from `storageKey`. |
+| 6 | In one `ALTER TABLE`: replace `IDX_request_inbox_created` with `(accountantId, createdAt, id)`, add `IDX_request_inbox_status_created` `(accountantId, status, createdAt, id)`, and replace `IDX_request_inbox_due` with `(accountantId, dueDate, id)`. Written after measuring the first design at 1,000,000 rows (section 5). | Restore the original `(accountantId, status, createdAt)` and `(accountantId, status, dueDate)` definitions and drop the status index. |
  
-**Order of the indexes and the foreign keys.** The indexes are created before the foreign keys on purpose. MariaDB needs an index on every foreign key column and creates one silently when none exists. Creating the inbox index first lets the `accountantId` foreign key reuse it, so there is no redundant index to pay write cost for. The history index on the event table does the same for its `requestId` foreign key.
+**Order of the indexes and the foreign keys.** The indexes are created before the foreign keys on purpose. MariaDB needs an index on every foreign key column and creates one silently when none exists. Creating the inbox index first lets the `accountantId` foreign key reuse it, so there is no redundant index to pay write cost for. The history index on the event table does the same for its `requestId` foreign key. Migration 6 keeps that guarantee: it replaces the inbox indexes in a single `ALTER TABLE`, so the foreign key on `accountantId` always has an index, and its `DROP INDEX IF EXISTS` for the status index makes it safe on a database where that index was created by hand while experimenting.
  
 Migration 0 exists so that a clean database can be built from migrations alone, because `synchronize` is off. It is not run against an existing development database; that database is recreated instead.
  
 The data is filled (step 2) before it is enforced (step 3), and the old column is dropped last (step 5). On a large table the backfill runs in batches. In MariaDB, schema changes commit implicitly and cannot be rolled back inside a transaction, so each migration is kept small.
  
-Each migration is verified by running `up`, then `down`, then `up` again, with test rows inserted before the backfill. The whole chain was also run from an empty database with `docker compose down -v`, then `migration:run`.
+Each migration is verified by running `up`, then `down`, then `up` again, with test rows inserted before the backfill. The whole chain was also run from an empty database with `docker compose down -v`, then `migration:run`. After the index changes, `migration:generate` was run as a drift check: it reports only the foreign key names (the migrations use readable names, TypeORM would generate hashed ones, and `RESTRICT` and `NO ACTION` behave the same in MariaDB).
  
 ## 9. What I would change at 100M rows
  
@@ -216,6 +229,7 @@ The event table is the largest table: each request creates several events, so 10
 - **Users:** a single `user` table instead of separate accountant and client tables.
 - **Ids:** time-ordered UUIDs (for example v7) instead of auto-increment integers, for unguessable ids and ids that can be generated before the insert. The cost is larger indexes, because every index entry stores the primary key, so I would measure index size and insert cost first.
 - **Authentication:** JWT in place of the actor header.
+
 ## 10. Assumptions and what was cut
  
 - **Who may review.** `accountantId` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewerId` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
