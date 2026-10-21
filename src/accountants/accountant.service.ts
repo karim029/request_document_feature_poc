@@ -16,20 +16,62 @@ export interface DashboardResponse {
   topClientsByOutstanding: TopClient[];
 }
 
+interface CacheEntry {
+  value: DashboardResponse;
+  expiresAt: number;
+}
+
 /**
- * The naive (live) dashboard: four small aggregate queries, run on every call.
+ * The dashboard: four small aggregate queries, with a short in-memory cache in front.
+ *
  * Definitions follow DESIGN.md section 10: a request is open while it is pending or reviewing,
  * and overdue when it is open and its due date has passed.
+ *
+ * Staleness (DESIGN.md section 7): a cached dashboard can be up to DASHBOARD_CACHE_TTL_MS old
+ * (30 seconds by default). Set DASHBOARD_CACHE_TTL_MS=0 to switch the cache off, for example to
+ * measure the live version. The cache lives in this process, so several app instances would each
+ * have their own copy.
  */
 @Injectable()
 export class DashboardService {
+  private readonly ttlMs = Number(process.env.DASHBOARD_CACHE_TTL_MS ?? 30_000);
+  private readonly cache = new Map<number, CacheEntry>();
+  // Calls for the same accountant that arrive while the numbers are being computed share
+  // that one computation, instead of each running the four queries.
+  private readonly inFlight = new Map<number, Promise<DashboardResponse>>();
+
   constructor(private readonly dataSource: DataSource) {}
 
   async getDashboard(accountantId: number): Promise<DashboardResponse> {
+    if (this.ttlMs <= 0) {
+      return this.compute(accountantId);
+    }
+
+    const cached = this.cache.get(accountantId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const running = this.inFlight.get(accountantId);
+    if (running) {
+      return running;
+    }
+
+    const computation = this.compute(accountantId)
+      .then((value) => {
+        this.cache.set(accountantId, { value, expiresAt: Date.now() + this.ttlMs });
+        return value;
+      })
+      .finally(() => {
+        this.inFlight.delete(accountantId);
+      });
+    this.inFlight.set(accountantId, computation);
+    return computation;
+  }
+
+  private async compute(accountantId: number): Promise<DashboardResponse> {
     await this.ensureAccountantExists(accountantId);
 
-    // The four queries run at the same time. To compare with running them one after another,
-    // await each of them in turn instead (that is a measurable change: see PERFORMANCE.md).
     const [countsByStatus, overdueCount, avgReviewTurnaroundHours, topClientsByOutstanding] =
       await Promise.all([
         this.getCountsByStatus(accountantId),
