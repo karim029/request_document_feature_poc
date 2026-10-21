@@ -8,6 +8,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { DocumentRequestEvent } from './entities/document-request-event.entity';
 import { BulkBatch } from './entities/bulk-batch.entity';
+import { BulkRequestsService } from './entities/bulk-request-create.service';
 
 @Module({
   imports: [
@@ -38,6 +39,6 @@ import { BulkBatch } from './entities/bulk-batch.entity';
     }),
   ],
   controllers: [RequestsController],
-  providers: [RequestsService],
+  providers: [RequestsService, BulkRequestsService],
 })
 export class RequestsModule {}

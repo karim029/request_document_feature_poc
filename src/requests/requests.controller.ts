@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseIntPipe,
   Patch,
@@ -16,11 +18,16 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { ActorId } from 'src/common/decorators/actor-id.decorator';
 import { InboxQueryDto } from './dto/inbox-query.dto';
+import { BulkCreateRequestDto } from './dto/bulk-create-request.dto';
+import { BulkRequestsService } from './entities/bulk-request-create.service';
 type MulterFile = Express.Multer.File;
 
 @Controller('requests')
 export class RequestsController {
-  constructor(private readonly requestsService: RequestsService) {}
+  constructor(
+    private readonly requestsService: RequestsService,
+    private readonly bulkRequestsService: BulkRequestsService,
+  ) {}
 
   @Get()
   getInbox(@Query() query: InboxQueryDto) {
@@ -35,6 +42,20 @@ export class RequestsController {
   @Post()
   createNewRequest(@Body() createRequestDto: CreateRequestDto) {
     return this.requestsService.createRequest(createRequestDto);
+  }
+
+  @Post('bulk')
+  createBulk(
+    @ActorId() actorId: number,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: BulkCreateRequestDto,
+  ) {
+    if (!idempotencyKey || idempotencyKey.length > 64) {
+      throw new BadRequestException(
+        'The Idempotency-Key header is required (up to 64 characters).',
+      );
+    }
+    return this.bulkRequestsService.create(actorId, idempotencyKey, dto);
   }
 
   @Post('upload/:id')
