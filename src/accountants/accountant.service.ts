@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-type StatusCounts = Record<'pending' | 'reviewing' | 'approved' | 'rejected', number>;
+type StatusCounts = Record<
+  'pending' | 'reviewing' | 'approved' | 'rejected',
+  number
+>;
 
 export interface TopClient {
   clientId: number;
@@ -59,7 +62,10 @@ export class DashboardService {
 
     const computation = this.compute(accountantId)
       .then((value) => {
-        this.cache.set(accountantId, { value, expiresAt: Date.now() + this.ttlMs });
+        this.cache.set(accountantId, {
+          value,
+          expiresAt: Date.now() + this.ttlMs,
+        });
         return value;
       })
       .finally(() => {
@@ -72,15 +78,24 @@ export class DashboardService {
   private async compute(accountantId: number): Promise<DashboardResponse> {
     await this.ensureAccountantExists(accountantId);
 
-    const [countsByStatus, overdueCount, avgReviewTurnaroundHours, topClientsByOutstanding] =
-      await Promise.all([
-        this.getCountsByStatus(accountantId),
-        this.getOverdueCount(accountantId),
-        this.getAverageTurnaroundHours(accountantId),
-        this.getTopClients(accountantId),
-      ]);
+    const [
+      countsByStatus,
+      overdueCount,
+      avgReviewTurnaroundHours,
+      topClientsByOutstanding,
+    ] = await Promise.all([
+      this.getCountsByStatus(accountantId),
+      this.getOverdueCount(accountantId),
+      this.getAverageTurnaroundHours(accountantId),
+      this.getTopClients(accountantId),
+    ]);
 
-    return { countsByStatus, overdueCount, avgReviewTurnaroundHours, topClientsByOutstanding };
+    return {
+      countsByStatus,
+      overdueCount,
+      avgReviewTurnaroundHours,
+      topClientsByOutstanding,
+    };
   }
 
   private async ensureAccountantExists(accountantId: number): Promise<void> {
@@ -95,14 +110,21 @@ export class DashboardService {
 
   // Number of requests in each status.
   private async getCountsByStatus(accountantId: number): Promise<StatusCounts> {
-    const rows = await this.dataSource.query<Array<{ status: string; n: string }>>(
+    const rows = await this.dataSource.query<
+      Array<{ status: string; n: string }>
+    >(
       `SELECT status, COUNT(*) AS n
          FROM document_request
         WHERE accountantId = ?
         GROUP BY status`,
       [accountantId],
     );
-    const counts: StatusCounts = { pending: 0, reviewing: 0, approved: 0, rejected: 0 };
+    const counts: StatusCounts = {
+      pending: 0,
+      reviewing: 0,
+      approved: 0,
+      rejected: 0,
+    };
     for (const row of rows) {
       counts[row.status as keyof StatusCounts] = Number(row.n);
     }
@@ -123,7 +145,9 @@ export class DashboardService {
   }
 
   // Average time from "reviewing" to "approved" or "rejected", for decisions of the last 30 days.
-  private async getAverageTurnaroundHours(accountantId: number): Promise<number | null> {
+  private async getAverageTurnaroundHours(
+    accountantId: number,
+  ): Promise<number | null> {
     const rows = await this.dataSource.query<Array<{ seconds: string | null }>>(
       `SELECT AVG(TIMESTAMPDIFF(SECOND, up.createdAt, decided.createdAt)) AS seconds
          FROM document_request_event decided
