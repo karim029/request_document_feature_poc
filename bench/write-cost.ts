@@ -137,9 +137,9 @@ async function main(): Promise<void> {
   const qr = AppDataSource.createQueryRunner();
   await qr.connect();
   const results: Array<Record<string, string | number>> = [];
-
+  const order = process.argv.includes('--reverse') ? [...SETUPS].reverse() : SETUPS;
   try {
-    for (const setup of SETUPS) {
+    for (const setup of order) {
       console.log(`\nSwitching to: ${setup.name}`);
       const buildSeconds = await applySetup(qr, setup);
       console.log(`  index build: ${buildSeconds.toFixed(1)} s`);
