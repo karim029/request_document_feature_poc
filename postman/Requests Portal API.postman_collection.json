@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "6f28a9b2-0db7-4870-a1fb-32fb31f7f7ef",
     "name": "Requests Portal API",
-    "description": "### Welcome to Postman! This is your first collection. \n\nCollections are your starting point for building and testing APIs. You can use this one to:\n\n• Group related requests\n• Test your API in real-world scenarios\n• Document and share your requests\n\nUpdate the name and overview whenever you’re ready to make it yours.\n\n[Learn more about Postman Collections.](https://learning.postman.com/docs/collections/collections-overview/)",
+    "description": "**`GET /requests`**  \n  \nReturns all document requests in the system, regardless of status. Response is wrapped in the standard `{ success, data, timestamp }` shape.\n\n**`GET /requests/:id`**  \n  \nReturns a single document request by its id, including the related client. Returns a 404 if no request exists with that id.\n\n**`POST /requests`**  \n  \nCreates a new document request. Requires `title` (string), `clientId` (number, must correspond to an existing client), and optionally `description` (string). Returns a 404 if `clientId` doesn't match a real client. New requests always start with status `pending`.\n\n**`POST /requests/:id/upload`**  \n  \nAllows a client to submit a document against an existing request. Requires `multipart/form-data` with a file under the field name `file`. Accepted types: JPG, JPEG, PNG, PDF. Max file size: 5MB. On success, the request's status automatically transitions to `reviewing` and the file path is saved. Uploading is blocked if the request is already `approved` or `rejected`.\n\n**`PATCH /requests/review/:id`**  \n  \nAllows an accountant to approve or reject a request that is currently in `reviewing` status. Requires `status` (`approved` or `rejected`). If rejecting, `rejectionReason` should be provided. Approving clears any previous rejection reason. Returns a 400 if the request isn't currently in `reviewing` status.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "52406562",
     "_collection_link": "https://go.postman.co/collection/52406562-6f28a9b2-0db7-4870-a1fb-32fb31f7f7ef?source=collection_link"
@@ -25,7 +25,60 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": ""
+          "raw": "http://localhost:3000/requests?accountantId=1&overdue=true",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "requests"
+          ],
+          "query": [
+            {
+              "key": "accountantId",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "12",
+              "disabled": true
+            },
+            {
+              "key": "status",
+              "value": "pending",
+              "disabled": true
+            },
+            {
+              "key": "status",
+              "value": "reviewing",
+              "disabled": true
+            },
+            {
+              "key": "clientId",
+              "value": "1",
+              "disabled": true
+            },
+            {
+              "key": "createdFrom",
+              "value": "2026-10-18",
+              "disabled": true
+            },
+            {
+              "key": "overdue",
+              "value": "true"
+            },
+            {
+              "key": "sort",
+              "value": "createdAt_desc",
+              "disabled": true
+            },
+            {
+              "key": "cursor",
+              "value": "eyJzb3J0IjoiY3JlYXRlZEF0X2Rlc2MiLCJpZCI6N30",
+              "disabled": true
+            }
+          ]
         },
         "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
       },
@@ -34,10 +87,16 @@
     {
       "name": "Get Request",
       "request": {
-        "method": "GET",
+        "method": "POST",
         "header": [],
         "url": {
-          "raw": ""
+          "raw": "{{baseUrl}}/package",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "package"
+          ]
         }
       },
       "response": []
@@ -60,7 +119,7 @@
         "header": [],
         "body": {
           "mode": "raw",
-          "raw": "{\r\n    \"clientId\": 1,\r\n    \"title\": \"CT 2026\",\r\n    \"description\": \"provide the document in pdf before 31/8\"\r\n}",
+          "raw": "{\r\n    \"clientId\": 1,\r\n    \"title\": \"test\"\r\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -86,7 +145,12 @@
       "name": "Upload Document",
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [
+          {
+            "key": "x-actor-id",
+            "value": "3"
+          }
+        ],
         "body": {
           "mode": "formdata",
           "formdata": [
@@ -96,6 +160,11 @@
               "src": [
                 "/C:/Users/Karim Tarek/Desktop/{B531FB13-8DBE-4FED-B3F9-3674E6E0A25F}.png"
               ]
+            },
+            {
+              "key": "version",
+              "value": "2",
+              "type": "text"
             }
           ]
         },
@@ -119,10 +188,15 @@
       "name": "Update Request Status",
       "request": {
         "method": "PATCH",
-        "header": [],
+        "header": [
+          {
+            "key": "x-actor-Id",
+            "value": "2"
+          }
+        ],
         "body": {
           "mode": "raw",
-          "raw": "{\r\n    \"status\": \"accepted\"\r\n}",
+          "raw": "{\r\n    \"status\": \"rejected\",\r\n    \"rejectionReason\": \"not the correct document\",\r\n    \"version\": 0\r\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -140,6 +214,84 @@
             "requests",
             "review",
             "2"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "get request history",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/requests/2/history",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "requests",
+            "2",
+            "history"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "accountant dashboard",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/accountants/31/dashboard",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "accountants",
+            "31",
+            "dashboard"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "bulk requests",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Actor-Id",
+            "value": "1"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "k1"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"title\": \"Bank statement\",\r\n \"dueDate\": \"2026-1-01\",\r\n \"clientIds\": [1, 2, 3]\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:3000/requests/bulk",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "requests",
+            "bulk"
           ]
         }
       },
