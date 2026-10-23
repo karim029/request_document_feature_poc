@@ -3,7 +3,8 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
-import { Server } from 'http';
+
+
 /**
  * Integration tests against a real MariaDB (the database in .env, or the CI service container).
  * Every row they create is tagged and removed afterwards.
@@ -23,7 +24,7 @@ describe('Requests portal (real MariaDB)', () => {
   let otherAccountantId: number;
   let clientId: number;
   let secondClientId: number;
-  const server = (): Server => app.getHttpServer() as Server;
+  let baseUrl: string;
 
   async function insert(sql: string, params: unknown[]): Promise<number> {
     const result = await db.query<{ insertId: number }>(sql, params);
@@ -54,7 +55,8 @@ describe('Requests portal (real MariaDB)', () => {
         transform: true,
       }),
     );
-    await app.init();
+    await app.listen(0,'127.0.0.1')
+    baseUrl = await app.getUrl()
     db = app.get(DataSource);
 
     accountantId = await insert(
@@ -103,7 +105,7 @@ describe('Requests portal (real MariaDB)', () => {
       );
 
       const calls = Array.from({ length: 20 }, (_, i) =>
-        request(server())
+        request(baseUrl)
           .patch(`/requests/review/${requestId}`)
           .set(
             'X-Actor-Id',
@@ -143,7 +145,7 @@ describe('Requests portal (real MariaDB)', () => {
       expect(events[0].fromStatus).toBe('reviewing');
       expect(events[0].toStatus).toBe(row.status);
 
-      const history = await request(server())
+      const history = await request(baseUrl)
         .get(`/requests/${requestId}/history`)
         .expect(200);
       const items = unwrap<Array<{ toStatus: string }>>(history.body);
@@ -198,7 +200,7 @@ describe('Requests portal (real MariaDB)', () => {
       const ids: number[] = [];
       let cursor: string | undefined;
       for (;;) {
-        const response: request.Response = await request(server())
+        const response: request.Response = await request(baseUrl)
           .get('/requests')
           .query({ accountantId: pagingAccountantId, limit, sort, cursor })
           .expect(200);
@@ -240,7 +242,7 @@ describe('Requests portal (real MariaDB)', () => {
     });
 
     it('rejects a cursor that is not valid', async () => {
-      await request(server())
+      await request(baseUrl)
         .get('/requests')
         .query({ accountantId: pagingAccountantId, cursor: 'garbage' })
         .expect(400);
@@ -249,7 +251,7 @@ describe('Requests portal (real MariaDB)', () => {
 
   describe('bulk create', () => {
     const bulk = (key: string, body: object) =>
-      request(server())
+      request(baseUrl)
         .post('/requests/bulk')
         .set('X-Actor-Id', String(accountantId))
         .set('Idempotency-Key', key)
