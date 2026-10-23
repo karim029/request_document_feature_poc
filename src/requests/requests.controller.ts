@@ -19,7 +19,8 @@ import { UpdateRequestDto } from './dto/update-request.dto';
 import { ActorId } from 'src/common/decorators/actor-id.decorator';
 import { InboxQueryDto } from './dto/inbox-query.dto';
 import { BulkCreateRequestDto } from './dto/bulk-create-request.dto';
-import { BulkRequestsService } from './entities/bulk-request-create.service';
+import { BulkRequestsService } from './bulk-request-create.service';
+import { toRequestResponse } from './dto/request-response';
 type MulterFile = Express.Multer.File;
 
 @Controller('requests')
@@ -35,13 +36,15 @@ export class RequestsController {
   }
 
   @Get(':id')
-  getRequest(@Param('id', ParseIntPipe) id: number) {
-    return this.requestsService.getRequest(id);
+  async getRequest(@Param('id', ParseIntPipe) id: number) {
+    return toRequestResponse(await this.requestsService.getRequest(id));
   }
 
   @Post()
-  createNewRequest(@Body() createRequestDto: CreateRequestDto) {
-    return this.requestsService.createRequest(createRequestDto);
+  async createNewRequest(@Body() createRequestDto: CreateRequestDto) {
+    return toRequestResponse(
+      await this.requestsService.createRequest(createRequestDto),
+    );
   }
 
   @Post('bulk')
@@ -60,22 +63,31 @@ export class RequestsController {
 
   @Post('upload/:id')
   @UseInterceptors(FileInterceptor('file'))
-  uploadRequestFile(
+  async uploadRequestFile(
     @Param('id', ParseIntPipe) requestId: number,
     @ActorId() actorId: number,
     @Body('version', ParseIntPipe) version: number,
     @UploadedFile() file: MulterFile,
   ) {
-    return this.requestsService.saveDocument(requestId, actorId, version, file);
+    return toRequestResponse(
+      await this.requestsService.saveDocument(
+        requestId,
+        actorId,
+        version,
+        file,
+      ),
+    );
   }
 
   @Patch('review/:id')
-  updateRequestStatus(
+  async updateRequestStatus(
     @Param('id', ParseIntPipe) id: number,
     @ActorId() actorId: number,
     @Body() updateRequestDto: UpdateRequestDto,
   ) {
-    return this.requestsService.updateStatus(id, actorId, updateRequestDto);
+    return toRequestResponse(
+      await this.requestsService.updateStatus(id, actorId, updateRequestDto),
+    );
   }
 
   @Get(':id/history')

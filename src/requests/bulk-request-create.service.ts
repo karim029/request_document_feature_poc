@@ -6,8 +6,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
-import { BulkCreateRequestDto } from '../dto/bulk-create-request.dto';
-
+import { BulkCreateRequestDto } from './dto/bulk-create-request.dto';
 export interface BulkCreateResponse {
   created: number;
   requestIds: number[];

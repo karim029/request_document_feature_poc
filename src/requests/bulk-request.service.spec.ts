@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
-import { BulkRequestsService } from './entities/bulk-request-create.service';
+import { BulkRequestsService } from './bulk-request-create.service';
 const dto = { title: 'Bank statement', clientIds: [5, 6] };
 
 interface Call {
