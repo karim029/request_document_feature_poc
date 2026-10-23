@@ -164,19 +164,24 @@ export class DashboardService {
     return Math.round((Number(seconds) / 3600) * 100) / 100;
   }
 
-  // The 10 clients with the most open requests.
+  // The 10 clients with the most open requests. The counting happens first, on the index alone
+  // (IDX_request_dashboard holds the client), and only the 10 winners are joined to the client table.
   private async getTopClients(accountantId: number): Promise<TopClient[]> {
     const rows = await this.dataSource.query<
       Array<{ clientId: number; username: string; outstanding: string }>
     >(
-      `SELECT c.id AS clientId, c.username, COUNT(*) AS outstanding
-         FROM document_request r
-         JOIN client c ON c.id = r.clientId
-        WHERE r.accountantId = ?
-          AND r.status IN ('pending', 'reviewing')
-        GROUP BY c.id, c.username
-        ORDER BY outstanding DESC, c.id
-        LIMIT 10`,
+      `SELECT c.id AS clientId, c.username, top.outstanding
+         FROM (
+           SELECT clientId, COUNT(*) AS outstanding
+             FROM document_request
+            WHERE accountantId = ?
+              AND status IN ('pending', 'reviewing')
+            GROUP BY clientId
+            ORDER BY outstanding DESC, clientId
+            LIMIT 10
+         ) top
+         JOIN client c ON c.id = top.clientId
+        ORDER BY top.outstanding DESC, c.id`,
       [accountantId],
     );
     return rows.map((row) => ({

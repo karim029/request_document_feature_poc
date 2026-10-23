@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { DashboardService } from './accountant.service';
+
 function setup(
   options: { accountantExists?: boolean; seconds?: string | null } = {},
 ) {
@@ -23,7 +24,7 @@ function setup(
         { seconds: options.seconds === undefined ? '14400' : options.seconds },
       ]);
     }
-    if (sql.includes('GROUP BY c.id')) {
+    if (sql.includes('GROUP BY clientId')) {
       return Promise.resolve([
         { clientId: 7, username: 'seed-client-7', outstanding: '4' },
       ]);
