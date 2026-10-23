@@ -1,81 +1,71 @@
-# Requests Portal (Document Request Feature) POC
+# Requests Portal
 
-Accountants on the mazeed ops currently request documents from clients
-informally, via WhatsApp. This feature replaces that with a structured,
-trackable workflow: an accountant creates a document request tied to a
-specific client, the client submits the document through mazeed ops,
-and the accountant reviews it, approving or rejecting with a reason.
+NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests with a safe review workflow (versioned, with an event history), an inbox with keyset pagination, a dashboard, and bulk create. Built to stay fast at 1,000,000 requests: see `docs/DESIGN.md` and `docs/PERFORMANCE.md`.
 
-## Tech Stack
-- Backend: NestJS + TypeScript
-- Database: MariaDB 11 (via TypeORM)
-- File storage: local disk (see Known Limitations)
-- Containerization: Docker (database only)
-- CI: GitHub Actions (lint, tests and production dependency audit)
+## Run it on a clean machine
 
-## Architecture Overview
-The core feature lives in `RequestsModule`, following the standard
-Controller → Service → Repository pattern. Three entities model the
-domain:
-- **Accountant** — has many Clients
-- **Client** — belongs to one Accountant, has many Requests
-- **DocumentRequest** — belongs to one Client, tracks status
-  (`pending` → `reviewing` → `approved`/`rejected`), an optional
-  rejection reason, and the path to the submitted file.
+Needs Node.js 24 and Docker.
 
-Validation is handled via DTOs (`class-validator`). Successful responses
-are wrapped by a global interceptor and errors by a global exception
-filter, so both share one response shape. Unexpected errors return a
-generic message to the client, while the details go to the server log.
+```bash
+cp .env.example .env        # Windows: copy .env.example .env
+docker compose up -d        # MariaDB 11
+npm ci
+npm run migration:run       # creates the schema (synchronize is off)
+npm run start:dev           # http://localhost:3000
+```
 
-## Prerequisites
-- Node.js 26 and npm
-- Docker (runs the database only; the app itself runs locally)
+Optional data:
 
-## Local Setup
-1. Clone the repo.
-2. Copy `.env.example` to `.env` and set your own passwords. The database
-   container and the app both read this one file, so the values stay in sync.
-3. Start the database: `docker compose up -d` (wait a few seconds for
-   MariaDB to be ready).
-4. Install dependencies: `npm install`
-5. Run the app: `npm run start:dev` (listens on port 3000)
-6. (Optional) Seed demo data: `npm run seed`
+```bash
+npm run seed                       # small demo data
+npm run seed:large -- --reset      # 200 accountants, 20,000 clients, 1,000,000 requests (about a minute)
+```
 
-Note: the database credentials are only applied the first time the
-container starts. To change them later, remove the volume with
-`docker compose down -v` and start again.
+## Checks
 
-## API Endpoints
+```bash
+npm run lint:ci
+npm test                    # unit tests
+npm run build
+npm run test:int            # integration tests, need the database up and migrated, app stopped
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/requests` | Returns all document requests |
-| GET | `/requests/:id` | Returns a single request by id (404 if not found) |
-| POST | `/requests` | Creates a new request (`title`, `clientId`, optional `description`) |
-| POST | `/requests/upload/:id` | Client submits a document (`multipart/form-data`, field `file`; jpg, jpeg, png or pdf, max 5 MB). Blocked once the request is approved. Moves status to `reviewing` |
-| PATCH | `/requests/review/:id` | Accountant approves/rejects a request currently `reviewing` (`status`, optional `rejectionReason`; a reason is required when rejecting) |
+CI (GitHub Actions) runs lint, unit tests, build and `npm audit --omit=dev`, then the integration tests against a MariaDB service container, with the migrations run from an empty database.
 
-## Testing
-- `npm test` runs the unit tests. They cover the review and upload rules
-  in `RequestsService`, plus the exception filter and response
-  interceptor, using mocks, so no database is needed.
-- CI runs lint (`npm run lint:ci`), the tests and a production
-  dependency audit (`npm audit --omit=dev`) on every push.
-- A Postman collection with all endpoints (including descriptions and
-  example bodies) is available in `/postman`.
+## API
 
-## Known Limitations
-This is a proof-of-concept, scoped deliberately to demonstrate the
-core workflow rather than production-readiness:
-- No authentication/user management — Accountants and Clients are
-  treated as existing platform users and were seeded directly.
-- One document per request only — no support for batching multiple
-  documents into a single request.
-- No rejection history — only the most recent rejection reason is
-  stored, not a full audit trail.
-- No delete endpoint — document requests are treated as a permanent
-  record, not something to be removed.
-- Files are stored on local disk, not cloud storage (e.g. S3).
-- The seed script is not idempotent — running it multiple times will
-  create duplicate demo records. Run once on a fresh database.
+The actor is identified by the `X-Actor-Id` header. This is identification, not authentication (see `docs/DESIGN.md` section 4). Successful responses are `{ success: true, data, timestamp }`, errors are `{ success: false, message, statusCode, timestamp }`.
+
+| Endpoint | What it does |
+| --- | --- |
+| `POST /requests` | Create a request for a client (`clientId`, `title`, optional `description`) |
+| `GET /requests?accountantId=...` | Inbox. Filters: `clientId`, `status` (repeatable), `createdFrom`, `createdTo`, `overdue=true`. `sort=createdAt_desc` or `dueDate_asc`, `limit` up to 100, `cursor` for the next page. No total count. |
+| `GET /requests/:id` | One request |
+| `PATCH /requests/review/:id` | Approve or reject (`status`, `rejectionReason` when rejecting, `version` the reviewer saw). Header `X-Actor-Id`: an accountant. 409 if the request changed meanwhile. |
+| `POST /requests/upload/:id` | Upload a document (multipart: `file`, and `version`). Header `X-Actor-Id`: the client of the request. |
+| `GET /requests/:id/history` | The events of a request, oldest first |
+| `POST /requests/bulk` | The same request for up to 500 clients, all or nothing. Headers `X-Actor-Id` (an accountant) and `Idempotency-Key` (a retry returns the first answer). |
+| `GET /accountants/:id/dashboard` | Counts per status, overdue, average review turnaround (30 days), top 10 clients by open requests |
+
+## Configuration
+
+Copy `.env.example` to `.env` and set the database values. Optional:
+
+| Variable | Meaning |
+| --- | --- |
+| `DB_LOGGING` | `true` prints every SQL statement (leave it off when measuring) |
+| `DASHBOARD_CACHE_TTL_MS` | Dashboard cache lifetime, default 30000. `0` switches it off, so the numbers are live. |
+| `BULK_INSERT_MODE` | `loop` inserts one row per statement. Only used to measure against the default multi-row insert. |
+
+## Documents
+
+- `docs/DESIGN.md`: the schema, the indexes and why, the concurrency design, the trade-offs, the migrations.
+- `docs/PERFORMANCE.md`: the measurements. `bench/README.md` has the commands to repeat them.
+- `AI_NOTES.md`: where AI was used and where it was wrong.
+
+## Known limitations
+
+- The actor header is not authentication. Production would use JWT with role guards.
+- Uploaded files are kept on local disk, there is no endpoint to download them, only one file per request is kept, and the MIME type is checked from what the client declares.
+- The dashboard cache lives in one process, and its numbers can be up to 30 seconds old.
+- The inbox has no page numbers and no total count (keyset pagination).

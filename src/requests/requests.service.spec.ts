@@ -73,8 +73,13 @@ describe('RequestsService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     };
     dataSource = {
-      transaction: jest.fn((callback: (m: typeof manager) => unknown) =>
-        callback(manager),
+      transaction: jest.fn(
+        (first: unknown, second?: (m: typeof manager) => unknown) =>
+          (
+            (typeof first === 'function' ? first : second) as (
+              m: typeof manager,
+            ) => unknown
+          )(manager),
       ),
     };
     inboxQb = {

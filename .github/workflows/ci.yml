@@ -1,16 +1,62 @@
 name: CI
+
 on:
   push:
   pull_request:
+
 jobs:
-  test:
+  checks:
+    name: Lint, unit tests, build, audit
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:ci
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev
+
+  integration:
+    name: Integration tests (MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: app_db
+          MARIADB_USER: app_user
+          MARIADB_PASSWORD: app_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "26"
+          node-version: 26
+          cache: npm
       - run: npm ci
-      - run: npm run lint:ci
-      - run: npm test
-      - run: npm audit --omit=dev
+      - name: Create .env for the test database
+        run: |
+          cat > .env <<'ENV'
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_USERNAME=app_user
+          DB_PASSWORD=app_password
+          DB_DATABASE=app_db
+          DB_LOGGING=false
+          DASHBOARD_CACHE_TTL_MS=0
+          ENV
+      - name: Run the migrations from an empty database
+        run: npm run migration:run
+      - name: Integration tests
+        run: npm run test:int
