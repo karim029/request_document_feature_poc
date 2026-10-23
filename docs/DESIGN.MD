@@ -158,11 +158,13 @@ Every response that returns a request includes its `version`. The review request
 
 The upload path follows the same pattern and also bumps `version`. If it did not, a re-upload would go undetected.
  
+### Isolation level
+
+The review and upload transactions run at READ COMMITTED. Under MariaDB's default REPEATABLE READ, a request that lost a race read the row again from a snapshot taken before the winner committed, so it saw the old version, concluded that the status was wrong, and answered 400 instead of 409. The conditional `UPDATE` already prevented any double write, because an `UPDATE` always sees the latest data: only the error code was wrong. READ COMMITTED makes every statement in the transaction see the latest committed data. The parallel integration test found this.
+
 ### How it is proven
  
-An integration test against a real MariaDB sends 20 parallel approve and reject calls for the same request. Exactly one returns 200, the other 19 return 409, and the request's event history shows one consistent transition.
-
-Isolation level. The review and upload transactions run at READ COMMITTED. Under MariaDB's default REPEATABLE READ, a request that lost a race read the row again from a snapshot taken before the winner committed, so it saw the old version and answered 400 instead of 409. The conditional UPDATE already prevented any double write; only the error code was wrong. READ COMMITTED makes every statement see the latest committed data. The parallel integration test found this.
+An integration test against a real MariaDB (`test/integration/requests.int-spec.ts`, also run in CI against a MariaDB service) sends 20 parallel approve and reject calls for the same request. Exactly one returns 200, the other 19 return 409, and the request's event history shows one consistent transition.
  
 ## 7. Trade-offs
  
@@ -193,6 +195,7 @@ Isolation level. The review and upload transactions run at READ COMMITTED. Under
 - **Options:** live aggregation (run the queries on every load); a rollup table (precomputed numbers per accountant, updated with each status change or by a job); or a short-lived cache of the live result.
 - **Choice:** build the live version first and measure it against the target (p95 under 300 ms at 20 concurrent users on 1,000,000 rows). If it misses, add a short cache of about 30 seconds first, because it adds no cost to writes and cannot drift from the data. A rollup table only if the cache is not enough.
 - **Staleness:** live numbers are exact. Cached numbers can be up to 30 seconds old, which is acceptable because the dashboard is an overview, and the inbox is where exact data matters.
+- **Measured:** the live version missed the target (p95 2.56 s). With the cache, p95 is 3 ms. A larger InnoDB buffer pool (1 GB instead of the default 128 MB) also brought the live version to p95 186 ms, so a cache miss costs about 0.2 s instead of about 3 s (`docs/PERFORMANCE.md`).
 - **What I give up:** with a cache, numbers up to 30 seconds old, and an in-memory cache is per application instance, so several instances would need a shared cache. A rollup would instead make every status change slower and add a risk of drift.
 
 ## 8. Migrations plan
@@ -225,6 +228,7 @@ The event table is the largest table: each request creates several events, so 10
 - **Archive old closed requests** the same way. The inbox mostly touches open and recent requests.
 - **Dashboard:** if the number of requests per accountant grows, move from live aggregation and a cache to a rollup table, accepting the extra write cost.
 - **Review the indexes.** Each index costs write time and memory, and at this size the indexes no longer fit in memory, so drop unused ones.
+- **Online schema changes:** run large backfills in batches, or with an online schema-change tool.
 - **Read replica** for dashboard and history reads.
 - **Files:** a child table with one row per upload (several documents per request and kept file history), and object storage instead of local disk.
 - **Users:** a single `user` table instead of separate accountant and client tables.
@@ -235,4 +239,4 @@ The event table is the largest table: each request creates several events, so 10
  
 - **Who may review.** `accountantId` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewerId` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
 - **Open, overdue and outstanding.** A request is open while its status is `pending` or `reviewing`. It is overdue when it is open and its `dueDate` has passed. Outstanding means open. Finished requests (approved or rejected) are never overdue, even if the decision came after the due date.
-- **Idempotency key for bulk create.** The client sends a unique key with each bulk request. The server stores it in a small `bulk_batch` table, with a hash of the request body and the response, in the same transaction that creates the requests. The key is unique, so a retry, or two retries at once, cannot create a second batch: the server finds the existing key and returns the stored response. The same key with a different body is rejected. The key belongs to the batch, so the large table needs no extra column or index. Old keys are deleted after a retention period, for example 24 hours.
+- **Idempotency key for bulk create.** The client sends a unique key (a UUID it generates) in the `Idempotency-Key` header of each bulk request. The server stores it in a small `bulk_batch` table, with a hash of the request body and the response, in the same transaction that creates the requests. The key is unique, so a retry, or two retries at once, cannot create a second batch: the server finds the existing key and returns the stored response. The same key with a different body is rejected. The key belongs to the batch, so the large table needs no extra column or index. Old keys are deleted after a retention period, for example 24 hours.
