@@ -4,7 +4,6 @@ import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
 
-
 /**
  * Integration tests against a real MariaDB (the database in .env, or the CI service container).
  * Every row they create is tagged and removed afterwards.
@@ -55,8 +54,8 @@ describe('Requests portal (real MariaDB)', () => {
         transform: true,
       }),
     );
-    await app.listen(0,'127.0.0.1')
-    baseUrl = await app.getUrl()
+    await app.listen(0, '127.0.0.1');
+    baseUrl = await app.getUrl();
     db = app.get(DataSource);
 
     accountantId = await insert(
