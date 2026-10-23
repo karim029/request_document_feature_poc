@@ -4,7 +4,7 @@ NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests w
 
 ## Run it on a clean machine
 
-Needs Node.js 24 and Docker.
+Needs Node.js 22 or newer and Docker.
 
 ```bash
 cp .env.example .env        # Windows: copy .env.example .env
@@ -57,6 +57,8 @@ Copy `.env.example` to `.env` and set the database values. Optional:
 | `DASHBOARD_CACHE_TTL_MS` | Dashboard cache lifetime, default 30000. `0` switches it off, so the numbers are live. |
 | `BULK_INSERT_MODE` | `loop` inserts one row per statement. Only used to measure against the default multi-row insert. |
 
+The compose file starts MariaDB with a 1 GB InnoDB buffer pool (`--innodb-buffer-pool-size=1G`, default is 128 MB). `docs/PERFORMANCE.md` shows what it does for the dashboard. Lower it if your machine has little memory.
+
 ## Documents
 
 - `docs/DESIGN.md`: the schema, the indexes and why, the concurrency design, the trade-offs, the migrations.
@@ -69,3 +71,4 @@ Copy `.env.example` to `.env` and set the database values. Optional:
 - Uploaded files are kept on local disk, there is no endpoint to download them, only one file per request is kept, and the MIME type is checked from what the client declares.
 - The dashboard cache lives in one process, and its numbers can be up to 30 seconds old.
 - The inbox has no page numbers and no total count (keyset pagination).
+- Not built (stretch): several documents per request, a PostgreSQL comparison, a Next.js page.
