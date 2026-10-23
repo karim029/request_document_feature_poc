@@ -21,6 +21,7 @@ import { Accountant } from '../../accountants/entities/accountant.entity';
   'id',
 ])
 @Index('IDX_request_reviewer', ['reviewer'])
+@Index('IDX_request_dashboard', ['accountant', 'status', 'dueDate', 'client'])
 export class DocumentRequest {
   @PrimaryGeneratedColumn()
   id!: number;
