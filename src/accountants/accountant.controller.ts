@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
-import { DashboardService } from './accountant.service';
+import { DashboardService } from './dashboard.service';
 @Controller('accountants')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}

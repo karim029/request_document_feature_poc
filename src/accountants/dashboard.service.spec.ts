@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { DashboardService } from './accountant.service';
+import { DashboardService } from './dashboard.service';
 
 function setup(
   options: { accountantExists?: boolean; seconds?: string | null } = {},

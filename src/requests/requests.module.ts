@@ -8,7 +8,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { DocumentRequestEvent } from './entities/document-request-event.entity';
 import { BulkBatch } from './entities/bulk-batch.entity';
-import { BulkRequestsService } from './entities/bulk-request-create.service';
+import { BulkRequestsService } from './bulk-request-create.service';
 
 @Module({
   imports: [
