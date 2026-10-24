@@ -38,8 +38,7 @@ The actor is identified by the `X-Actor-Id` header. This is identification, not 
 
 | Endpoint | What it does |
 | --- | --- |
-| `POST /requests` | Create a request for a client (`clientId`, `title`, optional `description`) |
-| `GET /requests?accountantId=...` | Inbox. Filters: `clientId`, `status` (repeatable), `createdFrom`, `createdTo`, `overdue=true`. `sort=createdAt_desc` or `dueDate_asc`, `limit` up to 100, `cursor` for the next page. No total count. |
+| `POST /requests` | Create a request for a client (`clientId`, `title`, optional `description`). Header `X-Actor-Id`: an accountant. The request and its first history event are written in one transaction. || `GET /requests?accountantId=...` | Inbox. Filters: `clientId`, `status` (repeatable), `createdFrom`, `createdTo`, `overdue=true`. `sort=createdAt_desc` or `dueDate_asc`, `limit` up to 100, `cursor` for the next page. No total count. |
 | `GET /requests/:id` | One request |
 | `PATCH /requests/review/:id` | Approve or reject (`status`, `rejectionReason` when rejecting, `version` the reviewer saw). Header `X-Actor-Id`: an accountant. 409 if the request changed meanwhile. |
 | `POST /requests/upload/:id` | Upload a document (multipart: `file`, and `version`). Header `X-Actor-Id`: the client of the request. |
@@ -72,3 +71,4 @@ The compose file starts MariaDB with a 1 GB InnoDB buffer pool (`--innodb-buffer
 - The dashboard cache lives in one process, and its numbers can be up to 30 seconds old.
 - The inbox has no page numbers and no total count (keyset pagination).
 - Not built (stretch): several documents per request, a PostgreSQL comparison, a Next.js page.
+- `POST /requests` is not idempotent: a double click or a retry creates a duplicate request. Bulk create has an idempotency key for that reason.

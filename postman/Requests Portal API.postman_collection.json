@@ -116,7 +116,10 @@
       ],
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [{
+          "key": "X-Actor-Id",
+          "value": "1"
+        }],
         "body": {
           "mode": "raw",
           "raw": "{\r\n    \"clientId\": 1,\r\n    \"title\": \"test\"\r\n}",
