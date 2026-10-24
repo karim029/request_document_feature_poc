@@ -4,7 +4,7 @@ NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests w
 
 ## Run it on a clean machine
 
-Needs Node.js 22 or newer and Docker.
+Needs Node.js 24 and Docker.
 
 ```bash
 cp .env.example .env        # Windows: copy .env.example .env
@@ -38,7 +38,8 @@ The actor is identified by the `X-Actor-Id` header. This is identification, not 
 
 | Endpoint | What it does |
 | --- | --- |
-| `POST /requests` | Create a request for a client (`clientId`, `title`, optional `description`). Header `X-Actor-Id`: an accountant. The request and its first history event are written in one transaction. || `GET /requests?accountantId=...` | Inbox. Filters: `clientId`, `status` (repeatable), `createdFrom`, `createdTo`, `overdue=true`. `sort=createdAt_desc` or `dueDate_asc`, `limit` up to 100, `cursor` for the next page. No total count. |
+| `POST /requests` | Create a request for a client (`clientId`, `title`, optional `description`). Header `X-Actor-Id`: an accountant. The request and its first history event are written in one transaction.|
+|`GET /requests?accountantId=...` | Inbox. Filters: `clientId`, `status` (repeatable), `createdFrom`, `createdTo`, `overdue=true`. `sort=createdAt_desc` or `dueDate_asc`, `limit` up to 100, `cursor` for the next page. No total count. |
 | `GET /requests/:id` | One request |
 | `PATCH /requests/review/:id` | Approve or reject (`status`, `rejectionReason` when rejecting, `version` the reviewer saw). Header `X-Actor-Id`: an accountant. 409 if the request changed meanwhile. |
 | `POST /requests/upload/:id` | Upload a document (multipart: `file`, and `version`). Header `X-Actor-Id`: the client of the request. |
