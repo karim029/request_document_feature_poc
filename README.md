@@ -1,6 +1,6 @@
 # Requests Portal
 
-NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests with a safe review workflow (versioned, with an event history), an inbox with keyset pagination, a dashboard, and bulk create. Built to stay fast at 1,000,000 requests: see `docs/DESIGN.md` and `docs/PERFORMANCE.md`.
+NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests with a safe review workflow (versioned, with an event history), an inbox with keyset pagination, a dashboard, and bulk create.Built to stay fast at 1,000,000 requests: see [docs/DESIGN.md](docs/DESIGN.md) and [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Run it on a clean machine
 
@@ -34,7 +34,7 @@ CI (GitHub Actions) runs lint, unit tests, build and `npm audit --omit=dev`, the
 
 ## API
 
-The actor is identified by the `X-Actor-Id` header. This is identification, not authentication (see `docs/DESIGN.md` section 4). Successful responses are `{ success: true, data, timestamp }`, errors are `{ success: false, message, statusCode, timestamp }`.
+The actor is identified by the `X-Actor-Id` header. This is identification, not authentication (see [docs/DESIGN.md](docs/DESIGN.md), section 4). Successful responses are `{ success: true, data, timestamp }`, errors are `{ success: false, message, statusCode, timestamp }`.
 
 | Endpoint | What it does |
 | --- | --- |
@@ -56,13 +56,13 @@ Copy `.env.example` to `.env` and set the database values. Optional:
 | `DASHBOARD_CACHE_TTL_MS` | Dashboard cache lifetime, default 30000. `0` switches it off, so the numbers are live. |
 | `BULK_INSERT_MODE` | `loop` inserts one row per statement. Only used to measure against the default multi-row insert. |
 
-The compose file starts MariaDB with a 1 GB InnoDB buffer pool (`--innodb-buffer-pool-size=1G`, default is 128 MB). `docs/PERFORMANCE.md` shows what it does for the dashboard. Lower it if your machine has little memory.
+The compose file starts MariaDB with a 1 GB InnoDB buffer pool (`--innodb-buffer-pool-size=1G`, default is 128 MB). [docs/PERFORMANCE.md](docs/PERFORMANCE.md) shows what it does for the dashboard. Lower it if your machine has little memory.
 
 ## Documents
 
-- `docs/DESIGN.md`: the schema, the indexes and why, the concurrency design, the trade-offs, the migrations.
-- `docs/PERFORMANCE.md`: the measurements. `bench/README.md` has the commands to repeat them.
-- `AI_NOTES.md`: where AI was used and where it was wrong.
+- [docs/DESIGN.md](docs/DESIGN.md): the schema, the indexes and why, the concurrency design, the trade-offs, the migrations.
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): the measurements. [bench/README.md](bench/README.md) has the commands to repeat them.
+- [AI_NOTES.md](AI_NOTES.md): where AI was used and where it was wrong.
 
 ## Known limitations
 
