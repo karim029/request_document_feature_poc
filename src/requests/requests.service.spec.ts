@@ -38,6 +38,8 @@ describe('RequestsService', () => {
     findOne: jest.Mock;
     insert: jest.Mock;
     createQueryBuilder: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
   };
   let qb: {
     update: jest.Mock;
@@ -71,6 +73,8 @@ describe('RequestsService', () => {
       findOne: jest.fn(),
       insert: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnValue(qb),
+      create: jest.fn(),
+      save: jest.fn(),
     };
     dataSource = {
       transaction: jest.fn(
@@ -620,27 +624,48 @@ describe('RequestsService', () => {
   });
 
   describe('createRequest', () => {
-    it('throws when a client is not found', async () => {
-      clientRepo.findOne.mockResolvedValue(null);
-      await expect(
-        service.createRequest({
-          clientId: 1,
-          title: 'test',
-          description: 'lorem ipsum',
-        }),
-      ).rejects.toThrow('Client does not exist.');
-      expect(requestRepo.save).not.toHaveBeenCalled();
+    const dto = { clientId: 1, title: 'test' };
+
+    it('stops when the actor is not an accountant', async () => {
+      manager.findOneBy.mockResolvedValue(null);
+      await expect(service.createRequest(9, dto)).rejects.toThrow(
+        'Only an accountant',
+      );
+      expect(manager.save).not.toHaveBeenCalled();
     });
 
-    it("copies the client's accountant onto the new request", async () => {
+    it('throws when the client does not exist', async () => {
+      manager.findOneBy.mockResolvedValue({ id: 1 });
+      manager.findOne.mockResolvedValue(null);
+      await expect(service.createRequest(1, dto)).rejects.toThrow(
+        'Client does not exist.',
+      );
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it("copies the client's accountant and writes the first event", async () => {
+      const actor = { id: 1 };
       const accountant = { id: 7 };
-      clientRepo.findOne.mockResolvedValue({ id: 1, accountant });
-      requestRepo.save.mockResolvedValue({ id: 10 });
+      manager.findOneBy.mockResolvedValue(actor);
+      manager.findOne.mockResolvedValue({ id: 1, accountant });
+      manager.create.mockImplementation(
+        (_entity: unknown, data: unknown) => data,
+      );
+      manager.save.mockResolvedValue({ id: 10 });
 
-      await service.createRequest({ clientId: 1, title: 'test' });
+      await service.createRequest(1, dto);
 
-      expect(requestRepo.save).toHaveBeenCalledWith(
+      expect(manager.save).toHaveBeenCalledWith(
+        DocumentRequest,
         expect.objectContaining({ accountant }),
+      );
+      expect(manager.insert).toHaveBeenCalledWith(
+        DocumentRequestEvent,
+        expect.objectContaining({
+          request: { id: 10 },
+          toStatus: DocumentRequestStatus.Pending,
+          actorAccountant: actor,
+        }),
       );
     });
   });

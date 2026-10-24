@@ -24,7 +24,6 @@ export class RequestsService {
   constructor(
     @InjectRepository(DocumentRequest)
     private requestRepository: Repository<DocumentRequest>,
-    @InjectRepository(Client) private clientRepository: Repository<Client>,
     private readonly dataSource: DataSource,
     @InjectRepository(DocumentRequestEvent)
     private readonly requestEventRepository: Repository<DocumentRequestEvent>,
@@ -118,27 +117,35 @@ export class RequestsService {
     return request;
   }
 
-  async createRequest(createRequestDto: CreateRequestDto) {
-    const client = await this.clientRepository.findOne({
-      where: {
-        id: createRequestDto.clientId,
-      },
-      relations: {
-        accountant: true,
-      },
+  async createRequest(actorId: number, createRequestDto: CreateRequestDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const actor = await manager.findOneBy(Accountant, { id: actorId });
+      if (!actor) {
+        throw new ForbiddenException('Only an accountant can create requests.');
+      }
+      const client = await manager.findOne(Client, {
+        where: { id: createRequestDto.clientId },
+        relations: { accountant: true },
+      });
+      if (!client) {
+        throw new NotFoundException('Client does not exist.');
+      }
+      const request = await manager.save(
+        DocumentRequest,
+        manager.create(DocumentRequest, {
+          title: createRequestDto.title,
+          description: createRequestDto.description ?? null,
+          client,
+          accountant: client.accountant,
+        }),
+      );
+      await manager.insert(DocumentRequestEvent, {
+        request: { id: request.id },
+        toStatus: DocumentRequestStatus.Pending,
+        actorAccountant: actor,
+      });
+      return request;
     });
-    if (!client) {
-      throw new NotFoundException('Client does not exist.');
-    }
-
-    const newRequest = {
-      title: createRequestDto.title,
-      description: createRequestDto.description,
-      client: client,
-      accountant: client.accountant,
-    };
-
-    return await this.requestRepository.save(newRequest);
   }
 
   async saveDocument(

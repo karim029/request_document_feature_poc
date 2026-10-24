@@ -41,9 +41,12 @@ export class RequestsController {
   }
 
   @Post()
-  async createNewRequest(@Body() createRequestDto: CreateRequestDto) {
+  async createNewRequest(
+    @ActorId() actorId: number,
+    @Body() createRequestDto: CreateRequestDto,
+  ) {
     return toRequestResponse(
-      await this.requestsService.createRequest(createRequestDto),
+      await this.requestsService.createRequest(actorId, createRequestDto),
     );
   }
 
