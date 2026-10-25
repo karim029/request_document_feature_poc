@@ -1,6 +1,6 @@
 # Requests Portal
 
-NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests with a safe review workflow (versioned, with an event history), an inbox with keyset pagination, a dashboard, and bulk create.Built to stay fast at 1,000,000 requests: see [docs/DESIGN.md](docs/DESIGN.md) and [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests with a safe review workflow (versioned, with an event history), an inbox with keyset pagination, a dashboard, and bulk create. Built to stay fast at 1,000,000 requests: see [docs/DESIGN.md](docs/DESIGN.md) and [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Run it on a clean machine
 
@@ -70,7 +70,10 @@ The compose file starts MariaDB with a 1 GB InnoDB buffer pool (`--innodb-buffer
 ## Known limitations
 
 - The actor header is not authentication. Production would use JWT with role guards.
-- Uploaded files are kept on local disk, there is no endpoint to download them, only one file per request is kept, and the MIME type is checked from what the client declares.
+- The read endpoints (inbox, history, dashboard) take any accountantId and are not access-controlled. Production would use JWT with an owner check.
+- Uploaded files are kept on local disk, there is no endpoint to download them, and the MIME type is checked from what the client declares.
+- The database keeps one file per request.
+- Files replaced by a re-upload are not yet deleted from disk.
 - The dashboard cache lives in one process, and its numbers can be up to 30 seconds old.
 - The inbox has no page numbers and no total count (keyset pagination).
 - Not built (stretch): several documents per request, a PostgreSQL comparison, a Next.js page.

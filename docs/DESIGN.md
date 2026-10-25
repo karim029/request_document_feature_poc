@@ -37,7 +37,7 @@ erDiagram
         string title
         text description
         string status
-        text rejectionReason
+        string rejectionReason
         int clientId FK
         int accountantId FK
         date dueDate
@@ -71,11 +71,11 @@ erDiagram
     }
 ```
  
-Table names are snake_case and column names are camelCase, because TypeORM maps entity properties to column names as written.
+Table names are snake_case and column names are camelCase, because TypeORM maps entity properties to column names as written. `rejectionReason` is `varchar(255)`.
  
 Every event has exactly one actor: exactly one of `actorAccountantId` and `actorClientId` is set, enforced by a `CHECK` constraint in the migration. A newly created request has `fromStatus` NULL.
 
-Both single create and bulk create write that first event in the same transaction as the request, so a request never exists without its history.
+Both single create and bulk create write that first event in the same transaction as the request, so requests created through the API always have their first event; rows that existed before migration 4 and the small demo seed (`npm run seed`) do not.
  
 The relations are required in the database, not only in the code: `document_request.clientId` and `client.accountantId` are `NOT NULL`, so a request cannot exist without a client and a client cannot exist without an accountant.
  
@@ -97,7 +97,7 @@ The brief's example event table has a single `actor_id`. Here it is two columns,
  
 ## 4. Actor assumption
  
-The server identifies the actor from an `X-Actor-Id` header. It checks that the user exists and that their role fits the action (an accountant creates(one request or a batch), reviews, approves and rejects requests; a client uploads), and it records the id in the event row so the history shows who acted.
+The server identifies the actor from an `X-Actor-Id` header. It checks that the user exists and that their role fits the action (an accountant creates (one request or a batch), reviews, approves and rejects requests; a client uploads), and it records the id in the event row so the history shows who acted.
  
 The weakness is that this is identification, not authentication: anyone can claim to be any actor, and the server cannot verify that the caller really is that user.
  
@@ -167,14 +167,14 @@ The review and upload transactions run at READ COMMITTED. Under MariaDB's defaul
 
 ### How it is proven
  
-An integration test against a real MariaDB (`test/integration/requests.int-spec.ts`, also run in CI against a MariaDB service) sends 20 parallel approve and reject calls for the same request. Exactly one returns 200, the other 19 return 409, and the request's event history shows one consistent transition.
+The parallel review race is proven by an integration test against a real MariaDB (`test/integration/requests.int-spec.ts`, also run in CI against a MariaDB service) that sends 20 parallel approve and reject calls for the same request. Exactly one returns 200, the other 19 return 409, and the request's event history shows one consistent transition. The re-upload-during-review case is covered by unit tests with mocks (`src/requests/requests.service.spec.ts`), not by an integration test.
  
 ## 7. Trade-offs
  
 ### Keyset vs offset pagination
  
 - **Question:** how the inbox (`GET /requests`) returns its pages at about 1,000,000 rows.
-- **Options:** Offset (`LIMIT 20 OFFSET n`) makes the database count past every skipped row, so deep pages get slower, and rows inserted while a user is paging can shift the pages so a row repeats or is skipped. Keyset uses a bookmark (the last row seen) and the index jumps straight to it, so any page costs about the same.
+- **Options:** Offset (`LIMIT 20 OFFSET n`) makes the database count past every skipped row, so deep pages get slower, and rows inserted while a user is paging can shift the pages so a row repeats or is skipped. Keyset uses a bookmark (the last row seen) and the index jumps straight to it, so any page should cost about the same (not measured here).
 - **Choice:** keyset on `(createdAt, id)`. The `id` is the tie-breaker, so the bookmark points at exactly one row. The server fetches `limit + 1` rows to know whether a next page exists.
 - **What I give up:** jumping to page N and page numbers. The client only gets next and previous. Each sort order (created date, due date) needs its own index and its own cursor.
 
@@ -208,7 +208,7 @@ An integration test against a real MariaDB (`test/integration/requests.int-spec.
 | # | Up | Down |
 | --- | --- | --- |
 | 0 | Create the original schema: `accountant`, `client` and `document_request` (with `documentPath`), including the foreign keys. `client.accountantId` and `document_request.clientId` are `NOT NULL`. | Drop the foreign keys, then the three tables. |
-| 1 | In one `ALTER TABLE` (`ALGORITHM=INSTANT`), add `dueDate`, `reviewerId`, `reviewedAt`, `storageKey`, `originalName`, `mimeType`, `fileSize`, `checksum`, `version` (default 0) and `accountantId` as nullable. Widen `description` to text. | Restore `description` to `varchar(255)` and drop the ten added columns. |
+| 1 | In one `ALTER TABLE` (`ALGORITHM=INSTANT`), add `dueDate`, `reviewerId`, `reviewedAt`, `storageKey`, `originalName`, `mimeType`, `fileSize`, `checksum`, `version` (default 0) and `accountantId` as nullable. Then widen `description` to text in a second `ALTER TABLE` (a table copy, not part of the `ALGORITHM=INSTANT` statement). | Restore `description` to `varchar(255)` and drop the ten added columns. |
 | 2 | Backfill `accountantId` from each request's client. Copy `documentPath` into `storageKey`. | Nothing. The copied data is derived, and the `down` of step 1 drops the columns. |
 | 3 | Make `accountantId` `NOT NULL`. Create the two inbox indexes and the `reviewerId` index. Then add the foreign keys on `accountantId` and `reviewerId`. | Drop the foreign keys, then the indexes, then make `accountantId` nullable again. |
 | 4 | Create `document_request_event` (foreign keys, a `CHECK` that exactly one actor column is set, and the history index) and `bulk_batch` (unique `idempotencyKey`). | Drop `bulk_batch`, then `document_request_event`. |
@@ -220,9 +220,9 @@ An integration test against a real MariaDB (`test/integration/requests.int-spec.
  
 Migration 0 exists so that a clean database can be built from migrations alone, because `synchronize` is off. It is not run against an existing development database; that database is recreated instead.
  
-The data is filled (step 2) before it is enforced (step 3), and the old column is dropped last (step 5). On a large table the backfill runs in batches. In MariaDB, schema changes commit implicitly and cannot be rolled back inside a transaction, so each migration is kept small.
+The data is filled (step 2) before it is enforced (step 3), and the old column is dropped last (step 5). On a very large table the backfill should run in batches. Here it is one UPDATE, which was acceptable for this dataset. In MariaDB, schema changes commit implicitly and cannot be rolled back inside a transaction, so each migration is kept small.
  
-Each migration is verified by running `up`, then `down`, then `up` again, with test rows inserted before the backfill. The whole chain was also run from an empty database with `docker compose down -v`, then `migration:run`. After the index changes, `migration:generate` was run as a drift check: it reports only the foreign key names (the migrations use readable names, TypeORM would generate hashed ones, and `RESTRICT` and `NO ACTION` behave the same in MariaDB).
+Each migration was verified by hand with up, down, up and a drift check (not automated in CI), with test rows inserted before the backfill. The whole chain was also run from an empty database (`docker compose down -v`, then `migration:run`), and CI repeats that on every push. The drift check reports only the foreign key names (the migrations use readable names, TypeORM would generate hashed ones, and `RESTRICT` and `NO ACTION` behave the same in MariaDB).
  
 ## 9. What I would change at 100M rows
  
@@ -243,6 +243,6 @@ The event table is the largest table: each request creates several events, so 10
  
 - **Who may review.** `accountantId` is the owning accountant and drives the inbox. Any accountant may review any request, for example a colleague covering, and `reviewerId` records who actually decided. An owner-only check is a production hardening step that belongs with real authentication. The version column is needed regardless, because the same accountant can act from two tabs and a client can re-upload while a request is being reviewed.
 - **Open, overdue and outstanding.** A request is open while its status is `pending` or `reviewing`. It is overdue when it is open and its `dueDate` has passed. Outstanding means open. Finished requests (approved or rejected) are never overdue, even if the decision came after the due date.
-- **Idempotency key for bulk create.** The client sends a unique key (a UUID it generates) in the `Idempotency-Key` header of each bulk request. The server stores it in a small `bulk_batch` table, with a hash of the request body and the response, in the same transaction that creates the requests. The key is unique, so a retry, or two retries at once, cannot create a second batch: the server finds the existing key and returns the stored response. The same key with a different body is rejected. The key belongs to the batch, so the large table needs no extra column or index. Old keys are deleted after a retention period, for example 24 hours.
+- **Idempotency key for bulk create.** The client sends a unique key (a UUID it generates) in the `Idempotency-Key` header of each bulk request. The server stores it in a small `bulk_batch` table, with a hash of the request body and the response, in the same transaction that creates the requests. The key is unique, so a retry, or two retries at once, cannot create a second batch: the server finds the existing key and returns the stored response. The same key with a different body is rejected. The key belongs to the batch, so the large table needs no extra column or index. Cleaning up old keys is not implemented.
 - **Duplicate submits.** A single create is not idempotent: a double click or a retry makes a second request. I added the idempotency key only to bulk create, because a duplicated batch of up to 500 requests is expensive and a single duplicate is easy to spot. The same key pattern could be added to single create.
 - **Who may create.** Any accountant may create a request, one or a batch, for any client. The request's `accountantId` comes from the client, so the inbox shows it to the client's accountant, not necessarily to the creator. In production an accountant would create requests only for their own clients; I left it open because the brief does not specify it, my review assumption already lets a colleague act, the actor header is not real authentication, and a batch of up to 500 spans accountants (about 100 clients each). Ownership checks belong with real authentication.

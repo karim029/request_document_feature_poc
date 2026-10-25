@@ -250,7 +250,7 @@ async function main(): Promise<void> {
       await truncateAll(qr);
     }
 
-    // Faster loading: skip foreign key and unique checks. The data is built to be consistent, and it is verified at the end.
+    // Faster loading: skip foreign key and unique checks. The data is built to be consistent; counts and the status split are printed at the end.
     await qr.query('SET FOREIGN_KEY_CHECKS = 0');
     await qr.query('SET UNIQUE_CHECKS = 0');
 
