@@ -70,7 +70,7 @@ All runs had 0% errors. The targets (inbox p95 under 100 ms, dashboard p95 under
 
 Change 7 improved the live dashboard p95 by 25% and the throughput by 44%. That is less than the page counts suggest (about 90 times fewer pages), because with 1 GB the pages were already in memory. The other dashboard queries still cost time (counting per status reads 4,579 index entries, and the turnaround joins the events table).
 
-After a strict review, the turnaround query was corrected: the first version paired every upload with every decision of the same request, which was wrong for requests with several review cycles. Re-measured after the correction: 148 ms at p95, within the run-to-run noise of the earlier 139 ms. The corrected query does a little more work (it looks up the latest review before each decision).
+After a strict review, the turnaround query was corrected: the first version paired every upload with every decision of the same request, which was wrong for requests with several review cycles. Re-measured after the correction: 148 ms at p95, within the run-to-run noise of the earlier 139 ms. The difference is within the noise: `ANALYZE` shows the corrected query reads slightly fewer review rows (338 against 507, see the review turnaround row in section 5).
 
 **Bulk create of 500 clients** (one user, timed calls, target under 2 s): 122 ms with multi-row inserts (median of 8 calls, range 116 to 136 ms; the first call after a restart took 778 ms) against 488 ms with one insert per row (median of 9 calls). Everything runs in one transaction.
 
