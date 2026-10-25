@@ -145,14 +145,22 @@ export class DashboardService {
   }
 
   // Average time from "reviewing" to "approved" or "rejected", for decisions of the last 30 days.
+  // Each decision is paired with the latest "reviewing" event before it (the id breaks a tie on
+  // the timestamp), so a request with several review cycles counts once per decision. A decision
+  // with no earlier "reviewing" event gives NULL, which AVG ignores.
   private async getAverageTurnaroundHours(
     accountantId: number,
   ): Promise<number | null> {
     const rows = await this.dataSource.query<Array<{ seconds: string | null }>>(
-      `SELECT AVG(TIMESTAMPDIFF(SECOND, up.createdAt, decided.createdAt)) AS seconds
+      `SELECT AVG(TIMESTAMPDIFF(SECOND,
+                (SELECT MAX(up.createdAt)
+                   FROM document_request_event up
+                  WHERE up.requestId = decided.requestId
+                    AND up.toStatus = 'reviewing'
+                    AND (up.createdAt < decided.createdAt
+                         OR (up.createdAt = decided.createdAt AND up.id < decided.id))),
+                decided.createdAt)) AS seconds
          FROM document_request_event decided
-         JOIN document_request_event up
-           ON up.requestId = decided.requestId AND up.toStatus = 'reviewing'
          JOIN document_request r ON r.id = decided.requestId
         WHERE r.accountantId = ?
           AND decided.toStatus IN ('approved', 'rejected')

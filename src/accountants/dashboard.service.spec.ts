@@ -19,7 +19,8 @@ function setup(
     }
     if (sql.includes('dueDate < CURDATE()'))
       return Promise.resolve([{ n: '2' }]);
-    if (sql.includes('TIMESTAMPDIFF')) {
+    // The turnaround query pairs each decision with the latest review before it.
+    if (sql.includes('TIMESTAMPDIFF') && sql.includes('MAX(up.createdAt)')) {
       return Promise.resolve([
         { seconds: options.seconds === undefined ? '14400' : options.seconds },
       ]);
