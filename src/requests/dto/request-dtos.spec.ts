@@ -1,12 +1,16 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateRequestDto } from './create-request.dto';
+import { BulkCreateRequestDto } from './bulk-create-request.dto';
 import { UpdateRequestDto } from './update-request.dto';
 import { DocumentRequestStatus } from '../entities/document-request-status.enum';
 
 // The same steps as the global ValidationPipe: transform the plain body, then validate it.
 async function errorsFor(
-  cls: typeof CreateRequestDto | typeof UpdateRequestDto,
+  cls:
+    | typeof CreateRequestDto
+    | typeof BulkCreateRequestDto
+    | typeof UpdateRequestDto,
   body: object,
 ): Promise<string[]> {
   const errors = await validate(plainToInstance(cls, body));
@@ -31,6 +35,48 @@ describe('request DTOs', () => {
           clientId: 1,
         }),
       ).toEqual(['title']);
+    });
+
+    it('accepts a description of 10,000 characters', async () => {
+      expect(
+        await errorsFor(CreateRequestDto, {
+          title: 'a',
+          description: 'd'.repeat(10000),
+          clientId: 1,
+        }),
+      ).toEqual([]);
+    });
+
+    it('rejects a description of 10,001 characters', async () => {
+      expect(
+        await errorsFor(CreateRequestDto, {
+          title: 'a',
+          description: 'd'.repeat(10001),
+          clientId: 1,
+        }),
+      ).toEqual(['description']);
+    });
+  });
+
+  describe('BulkCreateRequestDto', () => {
+    it('accepts a description of 10,000 characters', async () => {
+      expect(
+        await errorsFor(BulkCreateRequestDto, {
+          title: 'a',
+          description: 'd'.repeat(10000),
+          clientIds: [1],
+        }),
+      ).toEqual([]);
+    });
+
+    it('rejects a description of 10,001 characters', async () => {
+      expect(
+        await errorsFor(BulkCreateRequestDto, {
+          title: 'a',
+          description: 'd'.repeat(10001),
+          clientIds: [1],
+        }),
+      ).toEqual(['description']);
     });
   });
 
