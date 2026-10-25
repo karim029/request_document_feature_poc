@@ -1,9 +1,13 @@
-// k6 load test for a GET endpoint: 10 s warm-up (not recorded), then 60 s measured,
-// 20 virtual users (concurrent connections). A random accountant (1 to 200) is used on each request.
+// k6 load test for one GET endpoint: 20 virtual users (concurrent connections), a 10 s warm-up
+// that is not counted, then 60 s measured.
 //
-// Run:  k6 run -e REQUEST_PATH="/requests?accountantId={accountant}&limit=20" bench/inbox.k6.js
-// Other endpoints: change REQUEST_PATH, for example "/requests/{accountant}/history" is NOT valid;
-// use a real path, and {accountant} is replaced only where it appears.
+// Run it with the path to test in REQUEST_PATH, for example:
+//   k6 run -e REQUEST_PATH="/requests?accountantId={accountant}&limit=20" bench/inbox.k6.js
+//   k6 run -e REQUEST_PATH="/accountants/{accountant}/dashboard" bench/inbox.k6.js
+//
+// {accountant} is a placeholder: on every request it is replaced by a random accountant id from
+// 1 to 200, so the load is spread over all accountants. A path without {accountant} is sent as it
+// is. BASE_URL (default http://127.0.0.1:3000) and VUS (default 20) can be changed the same way.
 import http from 'k6/http';
 import { check } from 'k6';
 

@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "overrides": {
-  "multer": "2.5.0"
+    "multer": "2.5.0"
   },
   "scripts": {
     "seed": "ts-node -r tsconfig-paths/register src/seed.ts",
