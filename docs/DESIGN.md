@@ -168,7 +168,7 @@ The review and upload transactions run at READ COMMITTED. Under MariaDB's defaul
 
 ### How it is proven
  
-The parallel review race is proven by an integration test against a real MariaDB (`test/integration/requests.int-spec.ts`, also run in CI against a MariaDB service) that sends 20 parallel approve and reject calls for the same request. Exactly one returns 200, the other 19 return 409, and the request's event history shows one consistent transition. The re-upload-during-review case is covered by unit tests with mocks (`src/requests/requests.service.spec.ts`), not by an integration test.
+Integration tests against a real MariaDB (`test/integration/requests.int-spec.ts`, also run in CI against a MariaDB service) prove three things. The parallel review race: 20 parallel approve and reject calls for the same request give exactly one 200 and 19 409s, and the request's event history shows one consistent transition. A client re-uploading while a reviewer approves: the client's upload moves the version from 1 to 2, the reviewer who approves version 1 gets 409, and the request stays `reviewing`. Single create: the request and exactly one first event (pending, by the accountant) are written together. Unit tests with mocks (`src/requests/requests.service.spec.ts`) cover the rest, including that the review and upload transactions run at READ COMMITTED.
  
 ## 7. Trade-offs
  
