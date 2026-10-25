@@ -6,7 +6,7 @@
 
 - I tested with 1,000,000 requests and 20 users at the same time (k6).
 - My first inbox indexes were wrong for two queries. The index had `status` in the middle, so a query without a status filter could not read rows in date order, and the database had to sort thousands of rows. I found it with `EXPLAIN` and `ANALYZE` and fixed it one index at a time: default view p95 **1.24 s to 31 ms**, one status **371 ms to 37 ms**, due date sort **1.49 s to 40 ms**.
-- The dashboard was too slow when computed live (p95 2.56 s, target 300 ms). Three changes helped: a 30 second cache (p95 3 ms), more memory for the database (live p95 186 ms), and an index that holds the columns its two heaviest queries need (live p95 139 ms).
+- The dashboard was too slow when computed live (p95 2.56 s, target 300 ms). Three changes helped: a 30 second cache (p95 3 ms), more memory for the database (live p95 186 ms), and an index that holds the columns its two heaviest queries need (live p95 about 140 to 150 ms: 139 ms after the index, and 148 ms after the review turnaround query was corrected, which is within the run-to-run noise).
 - The indexes cost very little on writes (3 to 8% on bulk inserts, within the noise) and about 14 MB of disk (measured for the three inbox indexes; the dashboard index was not re-measured).
 - My parallel integration test found a real bug in the review code (some losers of a race got 400 instead of 409). It is fixed.
 - Twice I did not trust a result and repeated it before reporting it. Three of my predictions were wrong, and I say so.
@@ -30,7 +30,7 @@ Data (`npm run seed:large`, 58.7 s, and 66 s again on a clean clone from an empt
 | 4 | 30 second cache on the dashboard | p95 2.56 s | p95 3.15 ms | numbers up to 30 s old; a cache miss still costs the full live time |
 | 5 | Bulk create with two multi-row inserts instead of one insert per row | 488 ms for 500 requests | 122 ms | none |
 | 6 | Database memory cache from 128 MB to 1 GB | live dashboard p95 3.18 s | p95 186 ms | about 900 MB more memory |
-| 7 | Index `(accountantId, status, dueDate, clientId)`, and the top clients query counts first and looks up the 10 winners after | live dashboard p95 186 ms; overdue count read 6,281 pages, top clients about 10,200 | p95 139 ms; 50 pages and about 115 pages | one more index; write cost not measured |
+| 7 | Index `(accountantId, status, dueDate, clientId)`, and the top clients query counts first and looks up the 10 winners after | live dashboard p95 186 ms; overdue count read 6,281 pages, top clients about 10,200 | p95 139 ms (148 ms after the turnaround query was corrected); 50 pages and about 115 pages | one more index; write cost not measured |
 
 **The idea behind the index changes.** An index helps a query when its columns follow the query: first the columns the query filters on with `=`, then the columns it sorts by. A column in the middle that the query does not use breaks the order, and the database has to sort.
 
@@ -64,12 +64,13 @@ p50 is the middle request, p95 means 95 out of 100 requests were faster than thi
 | Dashboard | live / 30 second cache | 1.89 s / 2 ms | 2.56 s / 3.15 ms | 3.13 s / 5.0 ms | 8.6 / 3,095 |
 | Dashboard, live (cache off) | 128 MB / 1 GB memory cache | 2.28 s / 139 ms | 3.18 s / 186 ms | 3.67 s / 219 ms | 7.1 / 119 |
 | Dashboard, live (cache off, 1 GB) | before / after change 7 | 139 / 95 ms | 186 / 139 ms | 219 / 173 ms | 119 / 171 |
+| Dashboard, live (cache off, 1 GB) | after the turnaround correction | 106 ms | 148 ms | 189 ms | 154 |
 
-All runs had 0% errors. The targets (inbox p95 under 100 ms, dashboard p95 under 300 ms) are met. The cached dashboard is almost all cache hits (about 99.8%), and the slowest request (3.26 s) was a miss, so the cache hides the slow queries instead of removing them. With the 1 GB cache and change 7, a miss now costs about 0.14 s.
+All runs had 0% errors. The targets (inbox p95 under 100 ms, dashboard p95 under 300 ms) are met. The cached dashboard is almost all cache hits (about 99.8%), and the slowest request (3.26 s) was a miss, so the cache hides the slow queries instead of removing them. With the 1 GB cache and change 7, a miss now costs about 0.14 to 0.15 s.
 
 Change 7 improved the live dashboard p95 by 25% and the throughput by 44%. That is less than the page counts suggest (about 90 times fewer pages), because with 1 GB the pages were already in memory. The other dashboard queries still cost time (counting per status reads 4,579 index entries, and the turnaround joins the events table).
 
-After a strict review, the turnaround query was corrected: the first version paired every upload with every decision of the same request, which was wrong for requests with several review cycles. The live dashboard load numbers above were measured with the earlier version of that query; they have not yet been repeated with the corrected one.
+After a strict review, the turnaround query was corrected: the first version paired every upload with every decision of the same request, which was wrong for requests with several review cycles. Re-measured after the correction: 148 ms at p95, within the run-to-run noise of the earlier 139 ms. The difference is within the noise: `ANALYZE` shows the corrected query reads slightly fewer review rows (338 against 507, see the review turnaround row in section 5).
 
 **Bulk create of 500 clients** (one user, timed calls, target under 2 s): 122 ms with multi-row inserts (median of 8 calls, range 116 to 136 ms; the first call after a restart took 778 ms) against 488 ms with one insert per row (median of 9 calls). Everything runs in one transaction.
 
