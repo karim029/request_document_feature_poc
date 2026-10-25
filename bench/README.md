@@ -32,7 +32,7 @@ For the live dashboard set `DASHBOARD_CACHE_TTL_MS=0` in `.env`. Run each test t
     Get-Content bench\drop-inbox-indexes.sql | docker exec -i mariadb_db mariadb -u <user> -p<password> <database>
     Get-Content bench\restore-inbox-indexes.sql | docker exec -i mariadb_db mariadb -u <user> -p<password> <database>
 
-`drop-inbox-indexes.sql` is the naive setup (no inbox indexes), `restore-inbox-indexes.sql` the final design.
+`drop-inbox-indexes.sql` is the naive setup: it drops all the inbox indexes and the dashboard index (and the foreign key on `accountantId`, which needs one of them). `restore-inbox-indexes.sql` rebuilds the final design: the three inbox indexes, the dashboard index, then the foreign key.
 
 ## Write cost of the indexes
 
