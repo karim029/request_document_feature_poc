@@ -7,14 +7,14 @@
 - I tested with 1,000,000 requests and 20 users at the same time (k6).
 - My first inbox indexes were wrong for two queries. The index had `status` in the middle, so a query without a status filter could not read rows in date order, and the database had to sort thousands of rows. I found it with `EXPLAIN` and `ANALYZE` and fixed it one index at a time: default view p95 **1.24 s to 31 ms**, one status **371 ms to 37 ms**, due date sort **1.49 s to 40 ms**.
 - The dashboard was too slow when computed live (p95 2.56 s, target 300 ms). Three changes helped: a 30 second cache (p95 3 ms), more memory for the database (live p95 186 ms), and an index that holds the columns its two heaviest queries need (live p95 139 ms).
-- The indexes cost very little on writes (3 to 8% on bulk inserts, within the noise) and about 14 MB of disk.
+- The indexes cost very little on writes (3 to 8% on bulk inserts, within the noise) and about 14 MB of disk (measured for the three inbox indexes; the dashboard index was not re-measured).
 - My parallel integration test found a real bug in the review code (some losers of a race got 400 instead of 409). It is fixed.
 - Twice I did not trust a result and repeated it before reporting it. Three of my predictions were wrong, and I say so.
 - What I did not do is in section 8.
 
 ## 1. Setup
 
-Intel Core i5-1145G7 (4 cores, 8 threads), 15.7 GB RAM, SSD, Windows 11. Docker with 8 CPUs, MariaDB 11.8.9. The database memory cache (`innodb_buffer_pool_size`) was the default 128 MB for every measurement except the experiment in change 6, which used 1 GB; `compose.yaml` now sets 1 GB. The app ran as a production build with query logging off (TypeORM's warning for any query slower than 100 ms stays on, so a slow query still prints one line).
+Intel Core i5-1145G7 (4 cores, 8 threads), 15.7 GB RAM, SSD, Windows 11. Docker with 8 CPUs, MariaDB 11.8.9. The database memory cache (`innodb_buffer_pool_size`) was the default 128 MB for every measurement except the experiment in change 6, change 7 and the connection pool experiment (section 7), which used 1 GB; `compose.yaml` now sets 1 GB. The app ran as a production build with query logging off (TypeORM's warning for any query slower than 100 ms stays on, so a slow query still prints one line).
 
 k6: 20 virtual users, a 10 second warm-up that is not counted, then 60 seconds measured, with a random accountant (1 to 200) on every request. The app, the database and k6 share one laptop, so the absolute numbers are on the slow side. The comparisons between runs are what count. Repeating the same run gives results within about 10% of each other, so smaller differences are noise.
 
@@ -36,7 +36,7 @@ Data (`npm run seed:large`, 58.7 s, and 66 s again on a clean clone from an empt
 
 ## 3. How I found the problems
 
-- With the original index the inbox took 4 ms in the shell (1.2 s with no index at all), but the plan still showed `Using filesort`, which means the database sorts the rows itself: 8,790 rows sorted to return 21, and the sort was 96% of the query's time.
+- With the original index the inbox took 4 to 6 ms in the shell (about 3.3 ms of server time in ANALYZE; 1.2 s with no index at all), but the plan still showed `Using filesort`, which means the database sorts the rows itself: 8,790 rows sorted to return 21, and the sort was 96% of the query's time.
 - With 20 users it was much worse (p95 1.24 s), although one request alone took about 20 ms. The disk was at 99%, and the cache counters showed about 11,000 page reads per request.
 - `ANALYZE FORMAT=JSON` showed the cause. For many accountants the database chose an index that did not contain `createdAt`, so it read every one of the accountant's rows from the table just to sort them: **13,833 pages against 91** with the other index. A single quick query hides this (15.8 ms against 10 ms).
 - The due date sort had a different cause: 98% of its time was the sort itself.
@@ -46,7 +46,7 @@ Data (`npm run seed:large`, 58.7 s, and 66 s again on a clean clone from an empt
 - The first write test showed one setup 2.6 times slower on single inserts. That did not make sense (two to three indexes cannot cost 60%), so I repeated it in the opposite order, and it did not repeat. My guess is that the database was still saving the freshly built indexes to disk, but I have not proven it.
 - My first cached dashboard run matched the run without the cache. The fastest request was still 1.58 s, which a working cache cannot give. The cache was switched off by a mistake in `.env`.
 
-**Predictions I got wrong.** I expected the overdue filter on the inbox to be slow (it was not, p95 50 ms). I expected the bigger memory cache to help the live dashboard only a little (it made it 17 times faster). And I first called the slow inbox "a full table scan"; `EXPLAIN` showed it was not.
+**Predictions I got wrong.** I expected the overdue filter on the inbox to be slow (it was not, p95 50 ms before the due date index was replaced, 45 ms after). I expected the bigger memory cache to help the live dashboard only a little (it made it 17 times faster). And I first called the slow inbox "a full table scan"; `EXPLAIN` showed it was not.
 
 ## 4. Results with 20 users
 
