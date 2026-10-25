@@ -4,7 +4,7 @@ NestJS + TypeORM + MariaDB 11. Accountants ask clients for documents: requests w
 
 ## Run it on a clean machine
 
-Needs Node.js 24 and Docker.
+Needs Node.js 24 or newer and Docker.
 
 ```bash
 cp .env.example .env        # Windows: copy .env.example .env
@@ -46,6 +46,8 @@ The actor is identified by the `X-Actor-Id` header. This is identification, not 
 | `GET /requests/:id/history` | The events of a request, oldest first |
 | `POST /requests/bulk` | The same request for up to 500 clients, all or nothing. Headers `X-Actor-Id` (an accountant) and `Idempotency-Key` (a retry returns the first answer). |
 | `GET /accountants/:id/dashboard` | Counts per status, overdue, average review turnaround (30 days), top 10 clients by open requests |
+
+POST routes return 201, the NestJS default.
 
 ## Configuration
 
