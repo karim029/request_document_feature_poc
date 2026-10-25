@@ -69,6 +69,8 @@ All runs had 0% errors. The targets (inbox p95 under 100 ms, dashboard p95 under
 
 Change 7 improved the live dashboard p95 by 25% and the throughput by 44%. That is less than the page counts suggest (about 90 times fewer pages), because with 1 GB the pages were already in memory. The other dashboard queries still cost time (counting per status reads 4,579 index entries, and the turnaround joins the events table).
 
+After a strict review, the turnaround query was corrected: the first version paired every upload with every decision of the same request, which was wrong for requests with several review cycles. The live dashboard load numbers above were measured with the earlier version of that query; they have not yet been repeated with the corrected one.
+
 **Bulk create of 500 clients** (one user, timed calls, target under 2 s): 122 ms with multi-row inserts (median of 8 calls, range 116 to 136 ms; the first call after a restart took 778 ms) against 488 ms with one insert per row (median of 9 calls). Everything runs in one transaction.
 
 ## 5. Query plans
@@ -87,7 +89,7 @@ Changes 1, 2, 3 and 7 are index changes, so they have plans. Changes 4, 5 and 6 
 | Top 10 clients, before change 7 | `IDX_request_inbox_status_created` | about 10,200 pages | 14.1 ms | `Using temporary; Using filesort` (the sort: 0.06 ms) |
 | Top 10 clients, after | `IDX_request_dashboard` | about 115 pages | 1.0 ms | index only, then 10 client lookups |
 | Counts per status | `IDX_request_inbox_status_created` | 4,579 index entries | | from the index alone |
-| Review turnaround | `IDX_request_inbox_due` and `IDX_event_request_history` | 4,579 requests, about 2 events each | | no sort or temporary table |
+| Review turnaround, each decision paired with the latest review before it (`ANALYZE FORMAT=JSON`, 1 GB cache, warm) | `IDX_request_inbox_due` for the requests, `IDX_event_request_history` for the decisions and for the review subquery | 4,579 requests (56 pages); 676 events read for 169 decisions in the last 30 days (15,776 pages); 338 review events in the subquery (1,522 pages) | 8.6 ms | no sort or temporary table; the first version, which joined every review to every decision, read 507 review events (2,029 pages) in 8.3 ms, so the correction costs nothing measurable |
 | History of one request, at 2,300,000 events | `IDX_event_request_history` | 2 rows | | no sort |
 
 ### Queries per request
