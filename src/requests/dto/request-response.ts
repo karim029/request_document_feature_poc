@@ -18,7 +18,7 @@ export function toRequestResponse(request: DocumentRequest | null) {
     version: request.version,
     file: request.storageKey
       ? {
-          orignalName: request.originalName,
+          originalName: request.originalName,
           mimeType: request.mimeType,
           fileSize: request.fileSize,
         }
