@@ -24,7 +24,7 @@ export class DocumentRequestEvent {
   toStatus!: DocumentRequestStatus;
 
   @Column({ type: 'text', nullable: true })
-  reason?: string;
+  reason?: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

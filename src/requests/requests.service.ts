@@ -315,7 +315,10 @@ export class RequestsService {
           request: { id },
           fromStatus: DocumentRequestStatus.Reviewing,
           toStatus: updateRequestDto.status,
-          reason: updateRequestDto.rejectionReason! ?? null,
+          reason:
+            updateRequestDto.status === DocumentRequestStatus.Rejected
+              ? updateRequestDto.rejectionReason
+              : null,
           actorAccountant: actor,
         });
 

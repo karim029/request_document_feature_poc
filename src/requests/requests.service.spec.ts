@@ -149,7 +149,7 @@ describe('RequestsService', () => {
       expect(manager.insert).not.toHaveBeenCalled();
     });
 
-    it('approves, clears the rejection reason and inserts one event', async () => {
+    it('approves, clears the rejection reason and inserts one event with no reason', async () => {
       const updated = {
         id: 2,
         status: DocumentRequestStatus.Approved,
@@ -160,7 +160,11 @@ describe('RequestsService', () => {
         .mockResolvedValueOnce(updated);
       qb.execute.mockResolvedValue({ affected: 1 });
 
-      const result = await service.updateStatus(2, 1, approve);
+      // A reason sent with an approval is not stored, on the request or in the event.
+      const result = await service.updateStatus(2, 1, {
+        ...approve,
+        rejectionReason: 'ignored',
+      });
 
       expect(qb.set).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -174,6 +178,7 @@ describe('RequestsService', () => {
         expect.objectContaining({
           fromStatus: DocumentRequestStatus.Reviewing,
           toStatus: DocumentRequestStatus.Approved,
+          reason: null,
           actorAccountant: actor,
         }),
       );

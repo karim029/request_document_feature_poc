@@ -38,14 +38,16 @@ The actor is identified by the `X-Actor-Id` header. This is identification, not 
 
 | Endpoint | What it does |
 | --- | --- |
-| `POST /requests` | Create a request for a client (`clientId`, `title`, optional `description`). Header `X-Actor-Id`: an accountant. The request and its first history event are written in one transaction.|
+| `POST /requests` | Create a request for a client (`clientId`, `title` up to 255 characters, optional `description`). Header `X-Actor-Id`: an accountant. The request and its first history event are written in one transaction.|
 |`GET /requests?accountantId=...` | Inbox. Filters: `clientId`, `status` (repeatable), `createdFrom`, `createdTo`, `overdue=true`. `sort=createdAt_desc` or `dueDate_asc`, `limit` up to 100, `cursor` for the next page. No total count. |
 | `GET /requests/:id` | One request |
-| `PATCH /requests/review/:id` | Approve or reject (`status`, `rejectionReason` when rejecting, `version` the reviewer saw). Header `X-Actor-Id`: an accountant. 409 if the request changed meanwhile. |
+| `PATCH /requests/review/:id` | Approve or reject (`status`, `rejectionReason`, required when rejecting, 1 to 255 characters after trimming, `version` the reviewer saw). Header `X-Actor-Id`: an accountant. 409 if the request changed meanwhile. |
 | `POST /requests/upload/:id` | Upload a document (multipart: `file`, and `version`). Header `X-Actor-Id`: the client of the request. |
 | `GET /requests/:id/history` | The events of a request, oldest first |
 | `POST /requests/bulk` | The same request for up to 500 clients, all or nothing. Headers `X-Actor-Id` (an accountant) and `Idempotency-Key` (a retry returns the first answer). |
 | `GET /accountants/:id/dashboard` | Counts per status, overdue, average review turnaround (30 days), top 10 clients by open requests |
+
+Input that is empty or too long is rejected with 400, never 500.
 
 POST routes return 201, the NestJS default.
 
