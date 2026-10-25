@@ -1,8 +1,11 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import { readdir, unlink } from 'fs/promises';
+import { join } from 'path';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
+import { configureApp } from '../../src/configure-app';
 
 /**
  * Integration tests against a real MariaDB (the database in .env, or the CI service container).
@@ -47,13 +50,7 @@ describe('Requests portal (real MariaDB)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    configureApp(app);
     await app.listen(0, '127.0.0.1');
     baseUrl = await app.getUrl();
     db = app.get(DataSource);
@@ -91,7 +88,189 @@ describe('Requests portal (real MariaDB)', () => {
     ]);
     await db.query('DELETE FROM client WHERE username LIKE ?', [`${tag}%`]);
     await db.query('DELETE FROM accountant WHERE username LIKE ?', [`${tag}%`]);
+    for (const name of await uploadedFiles()) {
+      await unlink(join(UPLOADS, name));
+    }
     await app.close();
+  });
+
+  // Upload helpers. The uploaded file name carries the tag, so the stored file can be found.
+  const UPLOADS = 'uploads';
+
+  async function uploadedFiles(): Promise<string[]> {
+    const names = await readdir(UPLOADS).catch(() => [] as string[]);
+    return names.filter((name) => name.includes(tag));
+  }
+
+  // Polls a condition for up to 2 s: Nest removes a rejected upload after the response is sent.
+  async function waitFor(condition: () => Promise<boolean>): Promise<boolean> {
+    for (let i = 0; i < 40; i++) {
+      if (await condition()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return condition();
+  }
+
+  async function addRequest(
+    name: string,
+    status: string,
+    version: number,
+  ): Promise<number> {
+    return insert(
+      `INSERT INTO document_request
+         (title, status, clientId, accountantId, version, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, NOW(6), NOW(6))`,
+      [`${tag} ${name}`, status, clientId, accountantId, version],
+    );
+  }
+
+  function upload(requestId: number, actor: number, version?: number) {
+    const call = request(baseUrl)
+      .post(`/requests/upload/${requestId}`)
+      .set('X-Actor-Id', String(actor))
+      .attach('file', Buffer.from('%PDF-1.4 integration test'), {
+        filename: `${tag}-scan.pdf`,
+        contentType: 'application/pdf',
+      });
+    return version === undefined
+      ? call
+      : call.field('version', String(version));
+  }
+
+  describe('upload', () => {
+    it('the client uploads: 201, reviewing, version + 1, one event pending to reviewing by the client', async () => {
+      const requestId = await addRequest('upload ok', 'pending', 0);
+
+      const response = await upload(requestId, clientId, 0).expect(201);
+      const body = unwrap<{ status: string; version: number }>(response.body);
+      expect(body.status).toBe('reviewing');
+      expect(body.version).toBe(1);
+
+      const events = await db.query<
+        Array<{
+          fromStatus: string;
+          toStatus: string;
+          actorClientId: number;
+          actorAccountantId: number | null;
+        }>
+      >(
+        'SELECT fromStatus, toStatus, actorClientId, actorAccountantId FROM document_request_event WHERE requestId = ?',
+        [requestId],
+      );
+      expect(events).toEqual([
+        {
+          fromStatus: 'pending',
+          toStatus: 'reviewing',
+          actorClientId: clientId,
+          actorAccountantId: null,
+        },
+      ]);
+    });
+
+    it('a client that does not own the request gets 403', async () => {
+      const requestId = await addRequest('upload not owner', 'pending', 0);
+      await upload(requestId, secondClientId, 0).expect(403);
+    });
+
+    it('an approved request gets 400', async () => {
+      const requestId = await addRequest('upload approved', 'approved', 2);
+      await upload(requestId, clientId, 2).expect(400);
+    });
+
+    it('a missing version gives 400 and leaves no new file in uploads/', async () => {
+      const requestId = await addRequest('upload no version', 'pending', 0);
+      const before = (await uploadedFiles()).length;
+
+      await upload(requestId, clientId).expect(400);
+
+      const unchanged = await waitFor(
+        async () => (await uploadedFiles()).length === before,
+      );
+      expect(unchanged).toBe(true);
+    });
+  });
+
+  describe('re-upload while a reviewer approves', () => {
+    it('the client re-uploads first, so the reviewer who saw the old version gets 409', async () => {
+      const requestId = await addRequest('re-upload race', 'reviewing', 1);
+
+      // The client replaces the file the reviewer is looking at.
+      const reupload = await upload(requestId, clientId, 1).expect(201);
+      expect(unwrap<{ version: number }>(reupload.body).version).toBe(2);
+
+      // The reviewer approves what they saw, version 1: it is no longer the current file.
+      await request(baseUrl)
+        .patch(`/requests/review/${requestId}`)
+        .set('X-Actor-Id', String(accountantId))
+        .send({ status: 'approved', version: 1 })
+        .expect(409);
+
+      const [row] = await db.query<Array<{ status: string; version: number }>>(
+        'SELECT status, version FROM document_request WHERE id = ?',
+        [requestId],
+      );
+      expect(row).toEqual({ status: 'reviewing', version: 2 });
+    });
+  });
+
+  describe('single create', () => {
+    it('writes the request and exactly one first event by the accountant, and returns no private fields', async () => {
+      const title = `${tag} single create`;
+      const response = await request(baseUrl)
+        .post('/requests')
+        .set('X-Actor-Id', String(accountantId))
+        .send({ clientId, title })
+        .expect(201);
+      const created = unwrap<{ id: number }>(response.body);
+
+      const events = await db.query<
+        Array<{
+          fromStatus: string | null;
+          toStatus: string;
+          actorAccountantId: number;
+          actorClientId: number | null;
+        }>
+      >(
+        'SELECT fromStatus, toStatus, actorAccountantId, actorClientId FROM document_request_event WHERE requestId = ?',
+        [created.id],
+      );
+      expect(events).toEqual([
+        {
+          fromStatus: null,
+          toStatus: 'pending',
+          actorAccountantId: accountantId,
+          actorClientId: null,
+        },
+      ]);
+      expect(JSON.stringify(response.body)).not.toMatch(
+        /email|storageKey|checksum/,
+      );
+    });
+
+    it('a missing actor header gives 400 and creates nothing', async () => {
+      const title = `${tag} single no actor`;
+      await request(baseUrl)
+        .post('/requests')
+        .send({ clientId, title })
+        .expect(400);
+      expect(await count('document_request', 'title = ?', [title])).toBe(0);
+    });
+  });
+
+  describe('response envelope', () => {
+    it('wraps a success in { success: true, data } and an error in { success: false }', async () => {
+      const ok = await request(baseUrl)
+        .get('/requests')
+        .query({ accountantId })
+        .expect(200);
+      expect(ok.body).toMatchObject({ success: true });
+      expect(ok.body).toHaveProperty('data');
+
+      const missing = await request(baseUrl)
+        .get('/requests/999999999')
+        .expect(404);
+      expect(missing.body).toMatchObject({ success: false, statusCode: 404 });
+    });
   });
 
   describe('parallel transitions', () => {

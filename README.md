@@ -30,7 +30,7 @@ npm run build
 npm run test:int            # integration tests, need the database up and migrated, app stopped
 ```
 
-CI (GitHub Actions) runs lint, unit tests, build and `npm audit --omit=dev`, then the integration tests against a MariaDB service container, with the migrations run from an empty database.
+CI (GitHub Actions) runs lint, unit tests, build and `npm audit --omit=dev`, then the integration tests against a MariaDB service container, with the migrations run from an empty database. The integration tests cover the parallel review race, a re-upload during a review (409), the upload flow, single and bulk create, inbox paging with tied timestamps, the review turnaround and the response envelope.
 
 ## API
 

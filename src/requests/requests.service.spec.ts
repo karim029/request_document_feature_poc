@@ -230,6 +230,20 @@ describe('RequestsService', () => {
       );
     });
 
+    it('runs the review at READ COMMITTED, so a loser of a race sees the winner and gets 409', async () => {
+      manager.findOneBy
+        .mockResolvedValueOnce(actor)
+        .mockResolvedValueOnce({ id: 2 });
+      qb.execute.mockResolvedValue({ affected: 1 });
+
+      await service.updateStatus(2, 1, approve);
+
+      expect(dataSource.transaction).toHaveBeenCalledWith(
+        'READ COMMITTED',
+        expect.any(Function),
+      );
+    });
+
     it('returns 404 when the request does not exist', async () => {
       manager.findOneBy
         .mockResolvedValueOnce(actor)
@@ -413,6 +427,21 @@ describe('RequestsService', () => {
           DocumentRequestStatus.Reviewing,
         ],
       });
+    });
+
+    it('runs the upload at READ COMMITTED, like the review', async () => {
+      manager.findOneBy
+        .mockResolvedValueOnce(client)
+        .mockResolvedValueOnce({ id: 2 });
+      manager.findOne.mockResolvedValue(rejectedRequest);
+      qb.execute.mockResolvedValue({ affected: 1 });
+
+      await service.saveDocument(2, 5, 3, file);
+
+      expect(dataSource.transaction).toHaveBeenCalledWith(
+        'READ COMMITTED',
+        expect.any(Function),
+      );
     });
 
     it('returns 409 when the version changed meanwhile', async () => {
