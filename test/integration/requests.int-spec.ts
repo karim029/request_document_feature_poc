@@ -213,6 +213,50 @@ describe('Requests portal (real MariaDB)', () => {
     });
   });
 
+  describe('single create', () => {
+    it('writes the request and exactly one first event by the accountant, and returns no private fields', async () => {
+      const title = `${tag} single create`;
+      const response = await request(baseUrl)
+        .post('/requests')
+        .set('X-Actor-Id', String(accountantId))
+        .send({ clientId, title })
+        .expect(201);
+      const created = unwrap<{ id: number }>(response.body);
+
+      const events = await db.query<
+        Array<{
+          fromStatus: string | null;
+          toStatus: string;
+          actorAccountantId: number;
+          actorClientId: number | null;
+        }>
+      >(
+        'SELECT fromStatus, toStatus, actorAccountantId, actorClientId FROM document_request_event WHERE requestId = ?',
+        [created.id],
+      );
+      expect(events).toEqual([
+        {
+          fromStatus: null,
+          toStatus: 'pending',
+          actorAccountantId: accountantId,
+          actorClientId: null,
+        },
+      ]);
+      expect(JSON.stringify(response.body)).not.toMatch(
+        /email|storageKey|checksum/,
+      );
+    });
+
+    it('a missing actor header gives 400 and creates nothing', async () => {
+      const title = `${tag} single no actor`;
+      await request(baseUrl)
+        .post('/requests')
+        .send({ clientId, title })
+        .expect(400);
+      expect(await count('document_request', 'title = ?', [title])).toBe(0);
+    });
+  });
+
   describe('response envelope', () => {
     it('wraps a success in { success: true, data } and an error in { success: false }', async () => {
       const ok = await request(baseUrl)
