@@ -1,8 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
+import { configureApp } from '../../src/configure-app';
 
 /**
  * Integration tests against a real MariaDB (the database in .env, or the CI service container).
@@ -47,13 +48,7 @@ describe('Requests portal (real MariaDB)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    configureApp(app);
     await app.listen(0, '127.0.0.1');
     baseUrl = await app.getUrl();
     db = app.get(DataSource);
@@ -92,6 +87,22 @@ describe('Requests portal (real MariaDB)', () => {
     await db.query('DELETE FROM client WHERE username LIKE ?', [`${tag}%`]);
     await db.query('DELETE FROM accountant WHERE username LIKE ?', [`${tag}%`]);
     await app.close();
+  });
+
+  describe('response envelope', () => {
+    it('wraps a success in { success: true, data } and an error in { success: false }', async () => {
+      const ok = await request(baseUrl)
+        .get('/requests')
+        .query({ accountantId })
+        .expect(200);
+      expect(ok.body).toMatchObject({ success: true });
+      expect(ok.body).toHaveProperty('data');
+
+      const missing = await request(baseUrl)
+        .get('/requests/999999999')
+        .expect(404);
+      expect(missing.body).toMatchObject({ success: false, statusCode: 404 });
+    });
   });
 
   describe('parallel transitions', () => {

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
+import { configureApp } from '../../src/configure-app';
 
 /**
  * The dashboard's review turnaround against a real MariaDB, with a rejection and re-upload cycle.
@@ -68,6 +69,7 @@ describe('Dashboard review turnaround (real MariaDB)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
+    configureApp(app);
     await app.listen(0, '127.0.0.1');
     baseUrl = await app.getUrl();
     db = app.get(DataSource);
